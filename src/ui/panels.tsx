@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { sfx } from '../audio/sound';
 import { CARDS, CARD_IDS, CardId, GODS, ITEMS, ITEM_IDS, ItemId, characterById } from '../data/content';
 import { PLOTS, REGIONS, regionById } from '../data/map';
 import { BUILDINGS, RULES, SPECIALS, SpecialId } from '../data/rules';
@@ -134,6 +135,7 @@ export function BankPanel({ state, dispatch }: { state: GameState; dispatch: Dis
 export function Shop({ state, kind, dispatch }: { state: GameState; kind: 'card' | 'item'; dispatch: Dispatch }) {
   const p = state.players[state.current];
   const ids = kind === 'card' ? CARD_IDS : ITEM_IDS;
+  useEffect(() => sfx('shop'), []);
   const keeper = kind === 'card' ? { name: 'Koala Kate', pic: 'koala-card', line: `G'day, ${p.name}! Pick a card.` } : { name: 'Tess the Turtle', pic: 'turtle-card', line: `Need a ride, ${p.name}? Scooters are popular!` };
   return (
     <div className={`shop shop--${kind}`} role="dialog" aria-label={kind === 'card' ? 'Card Shop' : 'Item Shop'}>

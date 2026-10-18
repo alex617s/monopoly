@@ -224,8 +224,9 @@ p {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+  object-position: 50% 4%;
   border: 3px solid #fff;
-  background: #fff8e8;
+  background: #fff3d6;
   display: block;
 }
 .avatar__letter {
@@ -316,6 +317,11 @@ p {
 }
 .home__panel .logo {
   margin-bottom: 4px;
+}
+.home__small {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
 }
 .home__tag {
   text-align: center;
@@ -565,34 +571,30 @@ p {
   top: 0;
   pointer-events: none;
 }
-.world__svg .letters {
-  font-family: 'Baloo 2', sans-serif;
-  font-weight: 800;
-  font-size: 62px;
-  text-anchor: middle;
-  dominant-baseline: middle;
-}
-.world__svg .sign {
-  font-size: 20px;
-  fill: var(--ink);
-}
-.world__svg .god-glyph {
-  font-size: 38px;
-  fill: #fff;
-}
 .world__svg .disc-label,
 .world__svg .sign,
-.world__svg .god-glyph {
+.world__svg .sign-name {
   font-family: 'Baloo 2', sans-serif;
   font-weight: 800;
+}
+.world__svg .sign {
+  font-size: 24px;
+  fill: var(--ink);
+}
+.world__svg .sign-name {
+  font-size: 30px;
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 4px;
 }
 .plot-hit {
   position: absolute;
-  width: 140px;
-  height: 100px;
+  width: 150px;
+  height: 150px;
   border: 0;
   background: transparent;
-  border-radius: 50%;
+  border-radius: 40%;
 }
 .piece {
   position: absolute;
@@ -604,35 +606,44 @@ p {
 }
 .piece__shadow {
   position: absolute;
-  left: -30px;
-  top: -10px;
-  width: 60px;
+  left: -34px;
+  top: 2px;
+  width: 68px;
   height: 22px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(0, 0, 0, 0.3);
 }
 .piece__body {
   position: absolute;
-  left: -46px;
-  top: -112px;
-  width: 92px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  left: 0;
+  top: 0;
 }
 .piece--hop .piece__body {
   animation: hop 0.26s ease-out;
 }
-.piece--active .piece__avatar {
-  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.8), 0 0 26px 8px rgba(255, 220, 120, 0.9);
-}
 @keyframes hop {
   50% {
-    transform: translateY(-26px);
+    transform: translateY(-30px);
   }
 }
+.piece__figure {
+  position: absolute;
+  left: -60px;
+  bottom: -14px;
+  width: 120px;
+  height: 128px;
+  object-fit: contain;
+  object-position: 50% 100%;
+  filter: drop-shadow(0 6px 4px rgba(0, 0, 0, 0.3));
+}
+.piece--active .piece__figure {
+  filter: drop-shadow(0 0 10px rgba(255, 236, 140, 1)) drop-shadow(0 0 4px #fff) drop-shadow(0 6px 4px rgba(0, 0, 0, 0.3));
+}
 .piece__tag {
-  margin-top: -6px;
+  position: absolute;
+  left: 0;
+  top: 16px;
+  transform: translateX(-50%);
   padding: 1px 10px;
   border-radius: 99px;
   background: var(--c);
@@ -642,32 +653,25 @@ p {
   font-size: 17px;
   border: 2px solid #fff;
   white-space: nowrap;
-  max-width: 140px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .piece__god {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 3px solid #fff;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 900;
-  box-shadow: 0 0 14px 3px rgba(255, 230, 140, 0.8);
+  left: 22px;
+  top: -150px;
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(255, 236, 140, 0.9));
 }
 .piece__vehicle {
   position: absolute;
-  top: 46px;
-  left: -10px;
-  width: 34px;
-  height: 34px;
+  top: -44px;
+  left: -78px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: #fff;
   display: flex;
@@ -677,8 +681,8 @@ p {
 }
 .piece__auto {
   position: absolute;
-  top: -6px;
-  left: -6px;
+  top: -150px;
+  left: -60px;
   padding: 1px 6px;
   border-radius: 8px;
   background: var(--ink);
@@ -689,8 +693,8 @@ p {
 }
 .bubble {
   position: absolute;
-  left: 30px;
-  top: -190px;
+  left: 34px;
+  top: -230px;
   width: max-content;
   max-width: 230px;
   padding: 10px 14px;
@@ -724,7 +728,7 @@ p {
 .pop {
   position: absolute;
   left: -50px;
-  top: -150px;
+  top: -180px;
   width: 100px;
   text-align: center;
   font-family: var(--head);
@@ -1314,10 +1318,16 @@ p {
     font-size: 18px;
   }
   .board-list {
-    width: 220px;
+    width: 230px;
   }
   .rank__who b {
     font-size: 15px;
+  }
+  .rank__who small {
+    font-size: 11px;
+  }
+  .rank__total {
+    font-size: 14px;
   }
   .topline {
     top: auto;
@@ -1703,6 +1713,24 @@ p {
 }
 .drawer {
   width: min(720px, 100%);
+}
+.menu__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.menu__slider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.menu__slider input {
+  flex: 1;
+  max-width: 200px;
+  accent-color: var(--blue);
 }
 .drawer__grid {
   display: grid;

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
+import { audioSettings, setAudioSettings, subscribeAudio } from '../audio/sound';
 import { CHARACTERS } from '../data/content';
 import { RULES } from '../data/rules';
 import { Avatar, art } from './common';
@@ -24,6 +25,7 @@ export function Home(p: {
   onReopen: (code: string) => void;
   onHelp: () => void;
 }) {
+  const audio = useSyncExternalStore(subscribeAudio, audioSettings);
   return (
     <div className="home">
       <div className="home__art">
@@ -57,9 +59,14 @@ export function Home(p: {
         ) : (
           <p className="muted center">Online play and video chat work on the full game website.</p>
         )}
-        <button type="button" className="btn btn--wide btn--ghost" onClick={p.onHelp}>
-          How to Play
-        </button>
+        <div className="home__small">
+          <button type="button" className="btn btn--ghost" onClick={p.onHelp}>
+            How to Play
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => setAudioSettings({ music: !audio.music })}>
+            Music: {audio.music ? 'On' : 'Off'}
+          </button>
+        </div>
       </div>
     </div>
   );

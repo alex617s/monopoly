@@ -35,8 +35,9 @@ describe('map', () => {
     expect(ROADS.filter((r) => r.next.length > 1).length).toBe(1);
     expect(ROADS.filter((r) => r.prev.length > 1).length).toBe(1);
     expect(ROADS.every((r) => r.next.length >= 1 && r.prev.length >= 1)).toBe(true);
-    const cells = new Set([...ROADS.map((r) => `${r.i},${r.j}`), ...PLOTS.map((p) => `${p.i},${p.j}`)]);
-    expect(cells.size).toBe(ROADS.length + PLOTS.length);
+    // Spaces and places keep clear of each other on the picture.
+    const spots = [...ROADS, ...PLOTS];
+    for (const a of spots) for (const b of spots) if (a !== b) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(70);
   });
 });
 

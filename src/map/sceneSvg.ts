@@ -1,277 +1,215 @@
-// Draws the map as SVG markup. The static layer (ground, road, scenery) is
-// built once; the dynamic layer (buildings, gods, traps) is rebuilt as the
-// game changes. Pictures from ChatGPT can later replace these vector shapes.
+// Draws the map as SVG markup. The static layer (sea, land, road, scenery) is
+// built once; the dynamic layer (places, buildings, gods, traps) is rebuilt as
+// the game changes. Pictures come from public/art.
 
-import { DISC_INFO, PLOTS, REGIONS, ROADS } from '../data/map';
 import { GODS } from '../data/content';
+import { LonLat, MAINLAND_PLANE, Pt, TASMANIA_PLANE, WORLD_H, WORLD_W, inside, lonLatToWorld, plane, smoothPath, toWorld } from '../data/geo';
+import { DISC_INFO, OUTER_CURVE, PLOTS, REGIONS, ROADS, SHORT_CURVE, regionById } from '../data/map';
+import type { SpecialId } from '../data/rules';
 import type { GameState } from '../game/types';
-import { GRID, TH, TW, WORLD_H, WORLD_W, toScreen } from './iso';
+import { art } from '../ui/common';
 
 let seed = 11;
 const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-
-const roadCells = new Set(ROADS.map((r) => `${r.i},${r.j}`));
-const plotCells = new Set(PLOTS.map((p) => `${p.i},${p.j}`));
-
-/** Distance outside the 10 × 7 loop rectangle (0 inside or on it). */
-const outside = (i: number, j: number) => Math.max(-i, i - 10, -j, j - 7, 0);
-const isSea = (i: number, j: number) => outside(i, j) > 3.2;
-const isSand = (i: number, j: number) => !isSea(i, j) && outside(i, j) > 2.2;
-const isDirt = (i: number, j: number) => i >= 1 && i <= 9 && j >= 2 && j <= 5 && Math.abs(i - 5) <= 2.2;
+const r1 = (v: number) => v.toFixed(1);
 
 function shade(hex: string, f: number) {
   const n = parseInt(hex.slice(1), 16);
   const ch = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.max(0, Math.min(255, Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f)))));
   return '#' + ch.map((v) => v.toString(16).padStart(2, '0')).join('');
 }
-const pts = (p: number[][]) => p.map((q) => q.join(',')).join(' ');
-const dia = (x: number, y: number, a = TW / 2, b = TH / 2) => [[x, y - b], [x + a, y], [x, y + b], [x - a, y]];
-const poly = (p: number[][], fill: string, extra = '') => `<polygon points="${pts(p)}" fill="${fill}" ${extra}/>`;
 
-function box(x: number, y: number, s: number, h: number, col: string, top?: string) {
-  const a = (TW / 2) * s;
-  const b = (TH / 2) * s;
-  return (
-    poly([[x - a, y], [x, y + b], [x, y + b - h], [x - a, y - h]], shade(col, -0.05)) +
-    poly([[x, y + b], [x + a, y], [x + a, y - h], [x, y + b - h]], shade(col, -0.3)) +
-    poly(dia(x, y - h, a, b), top ?? shade(col, 0.25))
-  );
+/** A picture standing on the point x, y (its bottom edge `sink` pixels below it). */
+export function sprite(name: string, x: number, y: number, w: number, sink = 0, extra = '') {
+  return `<image href="${art(name)}" x="${r1(x - w / 2)}" y="${r1(y + sink - w)}" width="${w}" height="${w}" preserveAspectRatio="xMidYMax meet"${extra}/>`;
 }
 
-function tree(x: number, y: number, s: number) {
-  return `<g><ellipse cx="${x + 8}" cy="${y + 4}" rx="${30 * s}" ry="${13 * s}" fill="#000" opacity=".18"/>
-<rect x="${x - 4 * s}" y="${y - 34 * s}" width="${8 * s}" height="${36 * s}" rx="3" fill="#8a5a33"/>
-<circle cx="${x}" cy="${y - 52 * s}" r="${30 * s}" fill="#3f8f3a"/><circle cx="${x - 14 * s}" cy="${y - 44 * s}" r="${20 * s}" fill="#4fa346"/>
-<circle cx="${x + 12 * s}" cy="${y - 62 * s}" r="${16 * s}" fill="#6cc45a"/></g>`;
+const polyline = (pts: Pt[], closed: boolean) => 'M' + pts.map((p) => `${r1(p[0])} ${r1(p[1])}`).join(' L') + (closed ? 'Z' : '');
+
+// ------------------------------------------------------------------ static layer
+
+const LAND = [MAINLAND_PLANE.map(toWorld), TASMANIA_PLANE.map(toWorld)].map((pts) => smoothPath(pts, true, 1));
+const ULURU = lonLatToWorld([131.4, -24.9]);
+
+const LANDMARKS: { name: string; at: LonLat; w: number }[] = [
+  { name: 'landmark-opera', at: [152.5, -34.4], w: 230 },
+  { name: 'landmark-bridge', at: [152.1, -35.9], w: 250 },
+];
+
+/** Positions to keep scenery away from. */
+function busySpots(): { p: Pt; r: number }[] {
+  const out: { p: Pt; r: number }[] = [];
+  for (const q of OUTER_CURVE.filter((_, i) => i % 3 === 0)) out.push({ p: q, r: 70 });
+  for (const q of SHORT_CURVE.filter((_, i) => i % 3 === 0)) out.push({ p: q, r: 70 });
+  for (const pl of PLOTS) out.push({ p: [pl.x, pl.y], r: 120 });
+  for (const rd of ROADS) out.push({ p: [rd.x, rd.y], r: 80 });
+  for (const rg of REGIONS) out.push({ p: [rg.label.x, rg.label.y], r: 110 });
+  for (const lm of LANDMARKS) out.push({ p: lonLatToWorld(lm.at), r: 150 });
+  out.push({ p: ULURU, r: 190 });
+  return out;
 }
 
-function palm(x: number, y: number) {
-  let g = `<g><ellipse cx="${x + 10}" cy="${y + 4}" rx="34" ry="12" fill="#000" opacity=".16"/><path d="M${x} ${y} q8 -50 -4 -100" stroke="#a0703c" stroke-width="9" fill="none" stroke-linecap="round"/>`;
-  for (const a of [-150, -110, -60, -20, 20]) {
-    const r = (a * Math.PI) / 180;
-    const ex = x - 4 + Math.cos(r) * 60;
-    const ey = y - 100 + Math.sin(r) * 30 + 22;
-    g += `<path d="M${x - 4} ${y - 100} Q${(x - 4 + ex) / 2} ${y - 128} ${ex} ${ey}" stroke="#3f9a3c" stroke-width="12" fill="none" stroke-linecap="round"/>`;
-  }
-  return g + '</g>';
-}
-
-function rock(x: number, y: number) {
-  return `<g><ellipse cx="${x + 6}" cy="${y + 4}" rx="34" ry="12" fill="#000" opacity=".16"/><path d="M${x - 34} ${y} q6 -40 34 -44 q30 4 34 44 z" fill="#b5532a"/><path d="M${x - 10} ${y - 30} q10 -14 26 -6" stroke="#d9794a" stroke-width="5" fill="none"/></g>`;
-}
-
-function lettering(name: string, i: number, j: number, axis: 'i' | 'j', color: string) {
-  const { x, y } = toScreen(i, j);
-  const k = 100;
-  const m = (dy: number) =>
-    axis === 'i'
-      ? `matrix(${TW / 2 / k},${TH / 2 / k},${-TW / 2 / k},${TH / 2 / k},${x},${y + dy})`
-      : `matrix(${TW / 2 / k},${-TH / 2 / k},${TW / 2 / k},${TH / 2 / k},${x},${y + dy})`;
-  let g = '';
-  for (let d = 8; d >= 1; d--) g += `<text transform="${m(d)}" class="letters" fill="${shade(color, -0.45)}">${name}</text>`;
-  g += `<text transform="${m(0)}" class="letters" fill="${color}" stroke="#fff6dc" stroke-width="3">${name}</text>`;
-  return g;
-}
-
-export function staticSvg(): string {
+function scenery(): [number, string][] {
   seed = 11;
-  const out: string[] = [];
-  out.push(`<defs>
-<linearGradient id="sea" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#43b3e6"/><stop offset="1" stop-color="#1f7fc4"/></linearGradient>
-<filter id="soft"><feGaussianBlur stdDeviation="4"/></filter>
-</defs><rect width="${WORLD_W}" height="${WORLD_H}" fill="url(#sea)"/>`);
-
-  const cells: [number, number][] = [];
-  for (let i = GRID.iMin; i <= GRID.iMax; i++) for (let j = GRID.jMin; j <= GRID.jMax; j++) cells.push([i, j]);
-  cells.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
-
-  for (const [i, j] of cells) {
-    const { x, y } = toScreen(i, j);
-    if (isSea(i, j)) {
-      out.push(poly(dia(x, y), shade('#2f9bd8', (rand() - 0.5) * 0.1), 'opacity=".5"'));
-      continue;
-    }
-    const base = isSand(i, j) ? '#f1d79a' : isDirt(i, j) ? '#d9814a' : (i * 7 + j * 3) % 5 ? '#69b548' : '#5fae43';
-    out.push(poly(dia(x, y), shade(base, (rand() - 0.5) * 0.1)));
-    if (!isSand(i, j) && !isDirt(i, j) && !roadCells.has(`${i},${j}`)) {
-      for (let k = 0; k < 2; k++) {
-        const px = x + (rand() - 0.5) * TW * 0.6;
-        const py = y + (rand() - 0.5) * TH * 0.5;
-        out.push(`<path d="M${px} ${py} l2 -7 l2 7" stroke="#4e9a35" stroke-width="2" fill="none" stroke-linecap="round"/>`);
-      }
-    }
+  const items: [number, string][] = [];
+  const busy = busySpots();
+  const placed: Pt[] = [];
+  for (let k = 0; k < 2600 && placed.length < 150; k++) {
+    const lon = 113.5 + rand() * 40.5;
+    const lat = -11.5 - rand() * 27;
+    if (!inside(plane([lon, lat]), MAINLAND_PLANE)) continue;
+    const p = lonLatToWorld([lon, lat]);
+    if (busy.some((b) => Math.hypot(b.p[0] - p[0], b.p[1] - p[1]) < b.r)) continue;
+    if (placed.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 95)) continue;
+    // keep a little sand beach clear along the coast
+    const nearCoast = [[0, 30], [30, 0], [0, -30], [-30, 0]].some(([dx, dy]) => !inside(plane([lon + dx / 62, lat - dy / 62]), MAINLAND_PLANE));
+    if (nearCoast) continue;
+    placed.push(p);
+    const desert = Math.hypot((lon - 131.5) / 10, (lat + 25) / 7) < 1;
+    const north = lat > -20;
+    const t = rand();
+    const name = desert ? (t < 0.5 ? 'prop-rock' : t < 0.85 ? 'prop-bush' : 'prop-gumtree') : north ? (t < 0.55 ? 'prop-palm' : t < 0.85 ? 'prop-gumtree' : 'prop-bush') : t < 0.5 ? 'prop-gumtree' : t < 0.75 ? 'prop-bush' : t < 0.92 ? 'prop-flowers' : 'prop-palm';
+    const w = name === 'prop-rock' ? 92 : name === 'prop-flowers' ? 80 : 110 + rand() * 20;
+    items.push([p[1], sprite(name, p[0], p[1], w, w * 0.12)]);
   }
-  // Foam along the coast.
-  for (const [i, j] of cells) {
-    if (isSea(i, j)) continue;
-    const { x, y } = toScreen(i, j);
-    const edges: string[] = [];
-    if (isSea(i + 1, j)) edges.push(`M${x} ${y - TH / 2} L${x + TW / 2} ${y}`);
-    if (isSea(i, j + 1)) edges.push(`M${x + TW / 2} ${y} L${x} ${y + TH / 2}`);
-    if (isSea(i - 1, j)) edges.push(`M${x} ${y + TH / 2} L${x - TW / 2} ${y}`);
-    if (isSea(i, j - 1)) edges.push(`M${x - TW / 2} ${y} L${x} ${y - TH / 2}`);
-    if (edges.length) out.push(`<path d="${edges.join(' ')}" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".85"/>`);
+  // kangaroo crossing signs by the road
+  for (const k of [3, 21, 30]) {
+    const rd = ROADS[k];
+    items.push([rd.y - 70, sprite('prop-sign', rd.x + 70, rd.y - 70, 70, 6)]);
   }
-  // Road.
-  for (const r of ROADS) {
-    const { x, y } = toScreen(r.i, r.j);
-    out.push(poly(dia(x, y, (TW / 2) * 0.98, (TH / 2) * 0.98), '#3b3f4a'));
+  // Uluru: a big red rock with smaller ones around it
+  items.push([ULURU[1], sprite('prop-rock', ULURU[0], ULURU[1], 280, 30)]);
+  items.push([ULURU[1] + 30, sprite('prop-rock', ULURU[0] - 150, ULURU[1] + 30, 120, 14)]);
+  items.push([ULURU[1] + 10, sprite('prop-rock', ULURU[0] + 160, ULURU[1] + 10, 110, 14)]);
+  for (const lm of LANDMARKS) {
+    const [x, y] = lonLatToWorld(lm.at);
+    items.push([y, sprite(lm.name, x, y, lm.w, lm.w * 0.2)]);
   }
-  const lines: string[] = [];
-  for (const r of ROADS)
-    for (const n of r.next) {
-      const a = toScreen(r.i, r.j);
-      const b = toScreen(ROADS[n].i, ROADS[n].j);
-      lines.push(`M${a.x} ${a.y} L${b.x} ${b.y}`);
-    }
-  out.push(`<path d="${lines.join(' ')}" stroke="#ffd23f" stroke-width="5" stroke-dasharray="22 18" fill="none" stroke-linecap="round"/>`);
-  for (const r of REGIONS) out.push(lettering(r.name, r.label.i, r.label.j, r.label.axis, r.color));
-
-  // Scenery on free cells.
-  const objs: [number, string][] = [];
-  for (const [i, j] of cells) {
-    const key = `${i},${j}`;
-    if (isSea(i, j) || roadCells.has(key) || plotCells.has(key)) continue;
-    const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => roadCells.has(`${i + a},${j + b}`) || plotCells.has(`${i + a},${j + b}`));
-    const { x, y } = toScreen(i, j);
-    const r = rand();
-    if (isSand(i, j)) {
-      if (r < 0.3) objs.push([i + j + 0.6, palm(x + (rand() - 0.5) * 50, y)]);
-    } else if (isDirt(i, j)) {
-      if (r < 0.2) objs.push([i + j + 0.6, rock(x, y)]);
-    } else if (!near && r < 0.45) objs.push([i + j + 0.6, tree(x + (rand() - 0.5) * 60, y + (rand() - 0.5) * 20, 0.8 + rand() * 0.5)]);
-  }
-  objs.sort((a, b) => a[0] - b[0]);
-  out.push(objs.map((o) => o[1]).join(''));
-  return out.join('');
+  for (const rg of REGIONS) items.push([rg.label.y, regionSign(rg.label.x, rg.label.y, rg.name, rg.color)]);
+  return items;
 }
 
-// ------------------------------------------------------------------ dynamic
-
-function plotOutline(x: number, y: number, color: string | null) {
-  const d = dia(x, y, (TW / 2) * 0.86, (TH / 2) * 0.86);
-  return (color ? poly(d, color, 'opacity=".22"') : '') + poly(d, 'none', `stroke="${color ?? '#ffffff'}" stroke-width="${color ? 5 : 3}" stroke-dasharray="${color ? '0' : '12 8'}" opacity=".95"`);
-}
-
-function shadow(x: number, y: number, s: number) {
-  return `<ellipse cx="${x + 10}" cy="${y + 6}" rx="${(TW / 2) * s}" ry="${(TH / 2) * s * 0.8}" fill="#000" opacity=".22" filter="url(#soft)"/>`;
-}
-
-function building(x: number, y: number, level: number, color: string) {
-  let g = '';
-  switch (level) {
-    case 1: {
-      const a = (TW / 2) * 0.42;
-      const b = (TH / 2) * 0.42;
-      g += shadow(x, y, 0.5) + poly([[x - a, y], [x, y + b], [x, y - 52]], color) + poly([[x, y + b], [x + a, y], [x, y - 52]], shade(color, -0.3)) + poly([[x - 9, y + b - 4], [x + 3, y + b - 2], [x, y - 14]], '#1d2a44');
-      break;
-    }
-    case 2:
-    case 3: {
-      const h = level === 3 ? 62 : 40;
-      g += shadow(x, y, 0.62) + box(x, y, 0.56, h, '#fff4dc');
-      const a = (TW / 2) * 0.62;
-      const b = (TH / 2) * 0.62;
-      const rt = y - h;
-      const ap = rt - 46;
-      g += poly([[x - a, rt], [x, rt + b], [x, ap]], shade(color, -0.05)) + poly([[x, rt + b], [x + a, rt], [x, ap]], shade(color, -0.3)) + poly([[x - a, rt], [x, rt - b], [x, ap]], shade(color, 0.15));
-      g += poly([[x - 30, y + 2], [x - 16, y + 9], [x - 16, y - 13], [x - 30, y - 20]], '#7ec8f0') + poly([[x + 14, y + 8], [x + 28, y + 1], [x + 28, y - 21], [x + 14, y - 14]], '#5aa8d8');
-      if (level === 3) g += poly([[x - 30, y - 28], [x - 16, y - 21], [x - 16, y - 41], [x - 30, y - 48]], '#7ec8f0');
-      break;
-    }
-    case 4: {
-      const h = 124;
-      g += shadow(x, y, 0.72) + box(x, y, 0.66, h, '#fde8c8');
-      const a = (TW / 2) * 0.66;
-      for (let f = 22; f < h; f += 24) {
-        g += `<path d="M${x - a + 10} ${y - f + 6} L${x - 8} ${y + 22 - f}" stroke="#5aa8d8" stroke-width="9" stroke-dasharray="10 8"/>`;
-        g += `<path d="M${x + 8} ${y + 22 - f} L${x + a - 10} ${y - f + 6}" stroke="#3f86bd" stroke-width="9" stroke-dasharray="10 8"/>`;
-      }
-      g += poly(dia(x, y - h, a, (TH / 2) * 0.66), color);
-      break;
-    }
-    case 5: {
-      const h = 220;
-      g += shadow(x, y, 0.7) + box(x, y, 0.5, h, '#9fc6e6', '#d9eefc');
-      const a = (TW / 2) * 0.5;
-      const b = (TH / 2) * 0.5;
-      for (let f = 18; f < h - 6; f += 16) {
-        g += `<path d="M${x - a + 6} ${y - f + 3} L${x - 4} ${y + b - f - 1}" stroke="#fff" stroke-width="4" opacity=".7"/>`;
-        g += `<path d="M${x + 4} ${y + b - f - 1} L${x + a - 6} ${y - f + 3}" stroke="#cfe7f8" stroke-width="4" opacity=".55"/>`;
-      }
-      g += poly(dia(x, y - h, a * 0.5, b * 0.5), color) + `<rect x="${x - 2}" y="${y - h - 46}" width="4" height="40" fill="#1d2a44"/><circle cx="${x}" cy="${y - h - 48}" r="6" fill="${color}"/>`;
-      break;
-    }
-  }
-  return g;
-}
-
-function special(x: number, y: number, kind: string, color: string) {
-  switch (kind) {
-    case 'park':
-      return shadow(x, y, 0.6) + tree(x - 30, y + 4, 0.7) + tree(x + 28, y - 6, 0.8) + `<ellipse cx="${x}" cy="${y + 10}" rx="26" ry="12" fill="#7ec8f0" stroke="#fff" stroke-width="4"/>`;
-    case 'mall':
-      return (
-        shadow(x, y, 0.82) +
-        box(x, y, 0.8, 46, '#ffe9f0') +
-        `<path d="M${x - (TW / 2) * 0.5} ${y - 46} A ${(TW / 2) * 0.5} ${(TW / 2) * 0.42} 0 0 1 ${x + (TW / 2) * 0.5} ${y - 46}" fill="${shade(color, 0.35)}" stroke="${shade(color, -0.2)}" stroke-width="3"/>`
-      );
-    case 'petrol':
-      return shadow(x, y, 0.7) + box(x, y, 0.3, 40, '#ffffff') + `<rect x="${x - 60}" y="${y - 80}" width="120" height="16" rx="4" fill="${color}"/><rect x="${x - 50}" y="${y - 64}" width="6" height="64" fill="#566079"/><rect x="${x + 44}" y="${y - 64}" width="6" height="64" fill="#566079"/>`;
-    case 'theme':
-      return (
-        shadow(x, y, 0.7) +
-        `<circle cx="${x}" cy="${y - 90}" r="70" fill="none" stroke="${color}" stroke-width="8"/><circle cx="${x}" cy="${y - 90}" r="8" fill="#1d2a44"/>` +
-        Array.from({ length: 8 }, (_, k) => {
-          const a = (k * Math.PI) / 4;
-          return `<line x1="${x}" y1="${y - 90}" x2="${x + Math.cos(a) * 70}" y2="${y - 90 + Math.sin(a) * 70}" stroke="#fff" stroke-width="3"/><circle cx="${x + Math.cos(a) * 70}" cy="${y - 90 + Math.sin(a) * 70}" r="9" fill="${k % 2 ? '#ffd23f' : '#3a86ff'}"/>`;
-        }).join('') +
-        `<path d="M${x - 40} ${y} L${x} ${y - 90} L${x + 40} ${y}" stroke="#566079" stroke-width="7" fill="none"/>`
-      );
-  }
-  return '';
+function regionSign(x: number, y: number, text: string, color: string) {
+  const w = text.length * 19 + 40;
+  return `<g transform="translate(${r1(x)},${r1(y)})"><ellipse cx="4" cy="2" rx="${w / 2.6}" ry="10" fill="#000" opacity=".18"/><rect x="-12" y="-46" width="8" height="48" rx="3" fill="#8a5a33"/><rect x="4" y="-46" width="8" height="48" rx="3" fill="#7a4b25"/>
+<rect x="${-w / 2}" y="-98" width="${w}" height="56" rx="16" fill="${shade(color, -0.3)}"/><rect x="${-w / 2}" y="-104" width="${w}" height="56" rx="16" fill="${color}" stroke="#fff" stroke-width="4"/>
+<text x="0" y="-66" text-anchor="middle" class="sign-name">${text}</text></g>`;
 }
 
 function disc(x: number, y: number, kind: keyof typeof DISC_INFO) {
   const info = DISC_INFO[kind];
-  const col = info.color;
-  const txt = kind === 'hospital' ? '#d6342c' : '#fff';
+  const c = info.color;
+  const light = kind === 'hospital';
   const label = info.label;
-  const size = label.length > 3 ? 24 : label.length > 1 ? 30 : 42;
-  return `<g><ellipse cx="${x}" cy="${y + 6}" rx="66" ry="33" fill="#000" opacity=".28"/>
-<ellipse cx="${x}" cy="${y}" rx="66" ry="33" fill="${shade(col, -0.35)}"/>
-<ellipse cx="${x}" cy="${y - 6}" rx="66" ry="33" fill="${col}" stroke="${kind === 'hospital' ? '#d6342c' : '#fff'}" stroke-width="5"/>
-<ellipse cx="${x - 10}" cy="${y - 15}" rx="36" ry="12" fill="#fff" opacity=".22"/>
-<text x="${x}" y="${y + size * 0.3}" text-anchor="middle" class="disc-label" font-size="${size}" fill="${txt}" transform="matrix(1,0,0,.8,0,${(y - 6) * 0.2})">${label}</text></g>`;
+  const fs = label.length > 2 ? 22 : 34;
+  return `<g><ellipse cx="${r1(x)}" cy="${r1(y + 9)}" rx="46" ry="28" fill="#000" opacity=".22"/><ellipse cx="${r1(x)}" cy="${r1(y + 7)}" rx="44" ry="27" fill="${shade(c, light ? -0.25 : -0.35)}"/>
+<ellipse cx="${r1(x)}" cy="${r1(y)}" rx="44" ry="27" fill="${c}" stroke="#fff" stroke-width="4"/><ellipse cx="${r1(x - 8)}" cy="${r1(y - 9)}" rx="24" ry="8" fill="#fff" opacity=".35"/>
+<text x="${r1(x)}" y="${r1(y + fs * 0.34)}" text-anchor="middle" class="disc-label" font-size="${fs}" fill="${light ? '#e5383b' : '#fff'}">${label}</text></g>`;
 }
 
-export function dynamicSvg(s: GameState, colors: Record<string, string>): string {
-  const objs: [number, string][] = [];
-  for (const p of PLOTS) {
-    const ps = s.plots[p.id];
-    const { x, y } = toScreen(p.i, p.j);
-    const color = ps.owner ? colors[ps.owner] ?? '#888' : null;
-    let g = plotOutline(x, y, color);
-    if (!ps.owner) {
-      g += `<g transform="translate(${x},${y - 14})"><rect x="-3" y="0" width="6" height="26" fill="#8a5a33"/><rect x="-38" y="-28" width="76" height="32" rx="8" fill="#fff" stroke="#1d2a44" stroke-width="3"/><text x="0" y="-6" text-anchor="middle" class="sign">$${p.price}</text></g>`;
-    } else if (ps.special) g += special(x, y, ps.special, color!);
-    else if (ps.level > 0) g += building(x, y, ps.level, color!);
-    else g += `<g transform="translate(${x + 26},${y - 8})"><rect x="-2" y="-40" width="4" height="44" fill="#566079"/><path d="M2 -40 L30 -32 L2 -24 Z" fill="${color}"/></g>`;
-    objs.push([p.i + p.j + 0.5, g]);
+export function staticSvg(): string {
+  const out: string[] = [];
+  const tex = (id: string, name: string, size: number) =>
+    `<pattern id="${id}" patternUnits="userSpaceOnUse" width="${size}" height="${Math.round(size * 0.66)}"><image href="${art(name)}" width="${size}" height="${Math.round(size * 0.66)}" preserveAspectRatio="none"/></pattern>`;
+  out.push(`<defs>${tex('t-water', 'tex-water', 420)}${tex('t-grass', 'tex-grass', 360)}${tex('t-sand', 'tex-sand', 300)}${tex('t-dirt', 'tex-dirt', 360)}
+<linearGradient id="g-sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fe3ff" stop-opacity=".35"/><stop offset="1" stop-color="#0b4f9c" stop-opacity=".35"/></linearGradient>
+<radialGradient id="g-desert"><stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
+<radialGradient id="g-north"><stop offset="0" stop-color="#1e6b1e" stop-opacity=".35"/><stop offset="1" stop-color="#1e6b1e" stop-opacity="0"/></radialGradient>
+<filter id="f-blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="16"/></filter>
+<clipPath id="c-land"><path d="${LAND[0]}"/><path d="${LAND[1]}"/></clipPath>
+<mask id="m-desert"><rect width="${WORLD_W}" height="${WORLD_H}" fill="#000"/><ellipse cx="${r1(ULURU[0])}" cy="${r1(ULURU[1] + 60)}" rx="900" ry="430" fill="url(#g-desert)"/></mask></defs>`);
+  out.push(`<rect width="${WORLD_W}" height="${WORLD_H}" fill="#1f86d6"/><rect width="${WORLD_W}" height="${WORLD_H}" fill="url(#t-water)"/><rect width="${WORLD_W}" height="${WORLD_H}" fill="url(#g-sea)"/>`);
+  seed = 3;
+  for (let k = 0; k < 160; k++) {
+    const x = rand() * WORLD_W;
+    const y = rand() * WORLD_H;
+    out.push(`<path d="M${r1(x)} ${r1(y)} q10 -7 20 0 q10 7 20 0" stroke="#fff" stroke-width="3.5" fill="none" opacity="${(0.25 + rand() * 0.3).toFixed(2)}" stroke-linecap="round"/>`);
   }
-  for (const r of ROADS) {
-    const { x, y } = toScreen(r.i, r.j);
-    let g = '';
-    if (r.disc) g += disc(x, y, r.disc);
-    if (s.roadblocks[r.id] !== undefined) g += `<g transform="translate(${x},${y - 6})"><rect x="-40" y="-22" width="80" height="26" rx="5" fill="#ff8c00" stroke="#1d2a44" stroke-width="3"/><path d="M-28 -22 l-10 26 M-4 -22 l-10 26 M20 -22 l-10 26" stroke="#fff" stroke-width="7"/><rect x="-36" y="4" width="6" height="16" fill="#1d2a44"/><rect x="30" y="4" width="6" height="16" fill="#1d2a44"/></g>`;
-    if (s.bananas[r.id] !== undefined) g += `<g transform="translate(${x - 10},${y})"><path d="M-22 -2 q22 22 46 -10 q-6 -4 -10 -2 q-14 14 -30 2 z" fill="#ffd23f" stroke="#8a5a00" stroke-width="3"/></g>`;
-    const god = s.mapGods[r.id];
-    if (god) {
-      const c = GODS[god.id].color;
-      g += `<g class="map-god"><ellipse cx="${x}" cy="${y + 4}" rx="30" ry="12" fill="#000" opacity=".2"/><circle cx="${x}" cy="${y - 70}" r="34" fill="${c}" stroke="#fff" stroke-width="5"/><circle cx="${x}" cy="${y - 70}" r="40" fill="none" stroke="${c}" stroke-width="3" opacity=".5"/><text x="${x}" y="${y - 60}" text-anchor="middle" class="god-glyph">${GODS[god.id].good ? '★' : '☁'}</text></g>`;
+  for (const d of LAND) {
+    out.push(`<path d="${d}" fill="#a7f1ff" stroke="#a7f1ff" stroke-width="130" opacity=".55" filter="url(#f-blur)"/>`);
+    out.push(`<path d="${d}" fill="none" stroke="#e9fcff" stroke-width="34" opacity=".75" stroke-linejoin="round"/>`);
+    out.push(`<path d="${d}" transform="translate(0,30)" fill="#8f5a2f"/><path d="${d}" transform="translate(0,16)" fill="#b97a44"/>`);
+    out.push(`<path d="${d}" fill="url(#t-sand)"/>`);
+  }
+  out.push(`<g clip-path="url(#c-land)"><rect width="${WORLD_W}" height="${WORLD_H}" fill="url(#t-grass)"/>`);
+  const north = lonLatToWorld([140, -15]);
+  out.push(`<ellipse cx="${r1(north[0])}" cy="${r1(north[1])}" rx="1300" ry="420" fill="url(#g-north)"/>`);
+  out.push(`<rect width="${WORLD_W}" height="${WORLD_H}" fill="url(#t-dirt)" mask="url(#m-desert)"/>`);
+  for (const d of LAND) out.push(`<path d="${d}" fill="none" stroke="url(#t-sand)" stroke-width="56"/>`);
+  out.push('</g>');
+  for (const d of LAND) out.push(`<path d="${d}" fill="none" stroke="#d8a85c" stroke-width="3" opacity=".7"/>`);
+  // Lake Eyre and the Murray River
+  const lake = lonLatToWorld([137.4, -28.6]);
+  out.push(`<ellipse cx="${r1(lake[0])}" cy="${r1(lake[1])}" rx="80" ry="30" fill="#f4f1e6" stroke="#8fd8ee" stroke-width="6"/>`);
+  out.push(`<path d="${smoothPath(([[148.6, -36.3], [146.2, -35.8], [143.6, -34.7], [141.4, -34.2], [139.6, -34.6], [139.3, -35.6]] as LonLat[]).map(lonLatToWorld), false)}" stroke="#4fb3ec" stroke-width="13" fill="none" stroke-linecap="round"/>`);
+
+  // the road
+  const roads: [Pt[], boolean][] = [
+    [OUTER_CURVE, true],
+    [SHORT_CURVE, false],
+  ];
+  for (const [p, c] of roads) out.push(`<path d="${polyline(p, c)}" fill="none" stroke="#000" stroke-width="72" opacity=".2" transform="translate(0,9)" stroke-linejoin="round" stroke-linecap="round"/>`);
+  for (const [p, c] of roads) out.push(`<path d="${polyline(p, c)}" fill="none" stroke="#f3f1e7" stroke-width="66" stroke-linejoin="round" stroke-linecap="round"/>`);
+  for (const [p, c] of roads) out.push(`<path d="${polyline(p, c)}" fill="none" stroke="#5c6177" stroke-width="54" stroke-linejoin="round" stroke-linecap="round"/>`);
+  for (const [p, c] of roads) out.push(`<path d="${polyline(p, c)}" fill="none" stroke="#ffd23f" stroke-width="5" stroke-dasharray="22 20"/>`);
+
+  // spaces on the road
+  for (const rd of ROADS) {
+    if (rd.disc) out.push(disc(rd.x, rd.y, rd.disc));
+    else {
+      const c = regionById(PLOTS[rd.plot!].region).color;
+      out.push(`<ellipse cx="${r1(rd.x)}" cy="${r1(rd.y + 5)}" rx="31" ry="19" fill="${shade(c, -0.35)}"/><ellipse cx="${r1(rd.x)}" cy="${r1(rd.y)}" rx="31" ry="19" fill="#fff" stroke="${c}" stroke-width="7"/>`);
     }
-    if (g) objs.push([r.i + r.j + 0.2, g]);
   }
-  objs.sort((a, b) => a[0] - b[0]);
-  return objs.map((o) => o[1]).join('');
+  const items = scenery().sort((a, b) => a[0] - b[0]);
+  out.push(...items.map((i) => i[1]));
+  return out.join('\n');
+}
+
+// ------------------------------------------------------------------ dynamic layer
+
+const SPECIAL_ART: Record<SpecialId, string> = { park: 'special-park', mall: 'special-mall', petrol: 'special-petrol', theme: 'special-themepark' };
+const GOD_ART: Record<string, string> = { wealth: 'god-wealth', fortune: 'god-fortune', land: 'god-land', angel: 'god-angel', badLuck: 'god-badluck', poverty: 'god-poverty', devil: 'god-devil' };
+export const godArt = (id: string) => GOD_ART[id];
+
+export function dynamicSvg(s: GameState, colors: Record<string, string>): string {
+  const items: [number, string][] = [];
+  for (const pl of PLOTS) {
+    const ps = s.plots[pl.id];
+    const region = regionById(pl.region);
+    const owner = ps.owner ? colors[ps.owner] : null;
+    const { x, y } = pl;
+    let g = owner
+      ? `<ellipse cx="${r1(x)}" cy="${r1(y)}" rx="74" ry="46" fill="${owner}" opacity=".35"/><ellipse cx="${r1(x)}" cy="${r1(y)}" rx="74" ry="46" fill="none" stroke="${owner}" stroke-width="6"/>`
+      : `<ellipse cx="${r1(x)}" cy="${r1(y)}" rx="70" ry="43" fill="#d6f0b4" opacity=".75" stroke="${region.color}" stroke-width="5" stroke-dasharray="14 10"/>`;
+    if (!owner) {
+      g += `<g transform="translate(${r1(x)},${r1(y - 4)})"><rect x="-4" y="-34" width="8" height="36" rx="3" fill="#8a5a33"/><rect x="-46" y="-72" width="92" height="42" rx="12" fill="#fff" stroke="${region.color}" stroke-width="5"/><text x="0" y="-42" text-anchor="middle" class="sign">$${PLOTS[pl.id].price}</text></g>`;
+    } else if (ps.special) {
+      g += sprite(SPECIAL_ART[ps.special], x, y, 190, 44);
+    } else if (ps.level === 0) {
+      g += `<g transform="translate(${r1(x)},${r1(y)})"><path d="M0 0 v-70" stroke="#5b3a1e" stroke-width="6" stroke-linecap="round"/><path d="M3 -70 l46 14 l-46 14z" fill="${owner}" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></g>`;
+    } else {
+      g += sprite(`build-${ps.level}`, x, y, ps.level >= 4 ? 176 : 170, 44);
+    }
+    items.push([y, g]);
+  }
+  for (const [road, by] of Object.entries(s.roadblocks)) {
+    const rd = ROADS[Number(road)];
+    const c = colors[by] ?? '#e5383b';
+    items.push([rd.y + 1, `<g transform="translate(${r1(rd.x)},${r1(rd.y)})"><rect x="-6" y="-40" width="6" height="40" fill="#555"/><rect x="34" y="-40" width="6" height="40" fill="#555"/><rect x="-40" y="-52" width="80" height="22" rx="5" fill="#fff" stroke="${c}" stroke-width="4"/><path d="M-30 -32 l12 -20 M-6 -32 l12 -20 M18 -32 l12 -20" stroke="#e5383b" stroke-width="8"/></g>`]);
+  }
+  for (const [road] of Object.entries(s.bananas)) {
+    const rd = ROADS[Number(road)];
+    items.push([rd.y + 1, `<g transform="translate(${r1(rd.x + 24)},${r1(rd.y - 4)})"><path d="M-22 0 q22 22 44 -10 q-22 6 -44 10z" fill="#ffd23f" stroke="#a87900" stroke-width="3" stroke-linejoin="round"/><path d="M-22 0 l-8 -4" stroke="#6b4b00" stroke-width="4" stroke-linecap="round"/></g>`]);
+  }
+  for (const [road, god] of Object.entries(s.mapGods)) {
+    const rd = ROADS[Number(road)];
+    const c = GODS[god.id].color;
+    items.push([
+      rd.y + 2,
+      `<g class="map-god"><ellipse cx="${r1(rd.x)}" cy="${r1(rd.y + 4)}" rx="40" ry="14" fill="${c}" opacity=".35"/>${sprite(GOD_ART[god.id], rd.x, rd.y - 18, 96, 0)}</g>`,
+    ]);
+  }
+  items.sort((a, b) => a[0] - b[0]);
+  return items.map((i) => i[1]).join('');
 }

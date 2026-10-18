@@ -21,15 +21,20 @@ Pushing to `main` builds and publishes the game with GitHub Pages
 
 ## Pictures
 
-Drop PNG files into `public/art/` and the game uses them automatically:
+The map and pieces use the PNG files in `public/art/`. Upload new or replacement
+pictures there with the same names. `npm run build` shrinks them automatically
+(`scripts/optimize-art.mjs`), so large originals are fine.
 
-| File | Used for |
-| --- | --- |
-| `char-kangaroo.png`, `char-koala.png`, `char-wombat.png`, `char-quokka.png`, `char-platypus.png`, `char-emu.png` | Player pieces and avatars (square, transparent background) |
-| `koala-card.png`, `turtle-card.png` | Shopkeepers |
-| `home.png` | Picture on the home screen |
+Still to come (the map works without them): `landmark-uluru`, `landmark-goldcoast`,
+`landmark-reef`, `landmark-croc`, `landmark-tram`, `landmark-lighthouse`,
+`landmark-vineyard`, `prop-boat`, `prop-whale`, `vehicle-scooter`, `vehicle-car`,
+`shopkeeper-card`, `shopkeeper-item`.
 
-Until a picture exists, the game shows a coloured placeholder.
+## Sound
+
+Music and sound effects are made in the browser with the Web Audio API
+(`src/audio/sound.ts`), so there are no sound files. Music turns quiet while
+you are in the voice chat. The menu has Music and Sound switches.
 
 ## Online play for testing
 

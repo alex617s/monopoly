@@ -4,30 +4,17 @@ import { characterById } from '../data/content';
 export const art = (name: string) => `${import.meta.env.BASE_URL}art/${name}.png`;
 export const money = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-AU')}`;
 
-/** A character's picture, falling back to a coloured circle until ChatGPT art arrives. */
+/** A character's face, cut from the full picture, with a coloured ring. */
 export function Avatar({ character, size = 44, ring, className = '' }: { character: string; size?: number; ring?: string; className?: string }) {
   const c = characterById(character);
   const [failed, setFailed] = useState(false);
   const src = art(`char-${c.id}`);
-  const fallback = c.art ? art(c.art) : null;
-  const [current, setCurrent] = useState(src);
-  useEffect(() => {
-    setCurrent(src);
-    setFailed(false);
-  }, [src]);
+  useEffect(() => setFailed(false), [src]);
   const style = { width: size, height: size, '--ring': ring ?? c.color } as CSSProperties;
   return (
     <span className={`avatar ${className}`} style={style}>
       {!failed ? (
-        <img
-          src={current}
-          alt={c.animal}
-          draggable={false}
-          onError={() => {
-            if (fallback && current !== fallback) setCurrent(fallback);
-            else setFailed(true);
-          }}
-        />
+        <img src={src} alt={c.animal} draggable={false} onError={() => setFailed(true)} />
       ) : (
         <span className="avatar__letter" style={{ background: c.color, fontSize: size * 0.42 }}>
           {c.animal.slice(0, 2)}

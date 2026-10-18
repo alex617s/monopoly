@@ -1,10 +1,12 @@
 // The Australia map: one source of truth for the road, the land beside it and
-// the regions. Positions are isometric grid cells (i to the lower right,
-// j to the lower left on screen).
+// the regions. Positions are pixels in the world picture (see geo.ts).
 //
-// The outer loop is a 10 × 7 rectangle walked clockwise from START. A
-// shortcut runs from the top side (i = 5) down to the bottom side through
-// Uluru, so there is one fork and one merge.
+// The outer loop runs from START near Sydney up the east coast, across the
+// top, down the west and back along the south. A shortcut leaves the loop
+// near the Gold Coast and crosses the desert past Uluru to the south coast,
+// so there is one fork and one merge.
+
+import { LOOP, MAINLAND_PLANE, Pt, SHORTCUT_VIA, inside, lengths, plane, pointAt, sampleCurve, toWorld } from './geo';
 
 export type DiscKind =
   | 'start'
@@ -24,8 +26,8 @@ export interface Region {
   id: string;
   name: string;
   color: string;
-  /** Where the big name is painted on the grass, and which grid axis it runs along. */
-  label: { i: number; j: number; axis: 'i' | 'j' };
+  /** Where the region's sign stands. */
+  label: { x: number; y: number };
 }
 
 export interface Plot {
@@ -35,38 +37,36 @@ export interface Plot {
   price: number;
   /** The road space you stand on to buy or build here. */
   road: number;
-  i: number;
-  j: number;
+  x: number;
+  y: number;
 }
 
 export interface Road {
   id: number;
-  i: number;
-  j: number;
+  x: number;
+  y: number;
   disc?: DiscKind;
   plot?: number;
   next: number[];
   prev: number[];
 }
 
-export const REGIONS: Region[] = [
-  { id: 'sydney', name: 'SYDNEY', color: '#e8772e', label: { i: 0.2, j: -2.3, axis: 'i' } },
-  { id: 'goldcoast', name: 'GOLD COAST', color: '#f4b400', label: { i: 5.6, j: -2.3, axis: 'i' } },
-  { id: 'reef', name: 'CAIRNS', color: '#1b9aaa', label: { i: 12.1, j: 0.4, axis: 'j' } },
-  { id: 'darwin', name: 'DARWIN', color: '#2d9a55', label: { i: 12.1, j: 4.1, axis: 'j' } },
-  { id: 'perth', name: 'PERTH', color: '#7b4fc0', label: { i: 5.8, j: 9.3, axis: 'i' } },
-  { id: 'adelaide', name: 'ADELAIDE', color: '#d6342c', label: { i: 0.2, j: 9.3, axis: 'i' } },
-  { id: 'melbourne', name: 'MELBOURNE', color: '#2a6db5', label: { i: -2.2, j: 0.4, axis: 'j' } },
-  { id: 'uluru', name: 'ULURU', color: '#c2512c', label: { i: 2.2, j: 1.4, axis: 'j' } },
+const REGION_DEFS: Omit<Region, 'label'>[] = [
+  { id: 'sydney', name: 'SYDNEY', color: '#e8772e' },
+  { id: 'goldcoast', name: 'GOLD COAST', color: '#f4b400' },
+  { id: 'reef', name: 'CAIRNS', color: '#1b9aaa' },
+  { id: 'darwin', name: 'DARWIN', color: '#2d9a55' },
+  { id: 'perth', name: 'PERTH', color: '#7b4fc0' },
+  { id: 'adelaide', name: 'ADELAIDE', color: '#d6342c' },
+  { id: 'melbourne', name: 'MELBOURNE', color: '#2a6db5' },
+  { id: 'uluru', name: 'ULURU', color: '#c2512c' },
 ];
-
-export const regionById = (id: string) => REGIONS.find((r) => r.id === id)!;
 
 type Slot = { disc: DiscKind } | { plot: string; region: string; price: number };
 const D = (disc: DiscKind): Slot => ({ disc });
 const P = (region: string, plot: string, price: number): Slot => ({ plot, region, price });
 
-// Clockwise from START at the top corner.
+// From START near Sydney, up the east coast and around Australia.
 const OUTER: Slot[] = [
   D('start'),
   P('sydney', 'Bondi Beach', 230),
@@ -89,13 +89,13 @@ const OUTER: Slot[] = [
   P('darwin', 'Mindil Beach', 130),
   P('darwin', 'Kakadu', 150),
   D('itemShop'),
+  D('hospital'),
   P('perth', 'Rottnest Island', 120),
-  D('chance'), // the merge
   P('perth', 'Fremantle', 130),
   P('perth', 'Kings Park', 150),
-  D('hospital'),
-  P('adelaide', 'Glenelg Beach', 90),
+  D('chance'), // the merge
   D('lucky'),
+  P('adelaide', 'Glenelg Beach', 90),
   P('adelaide', 'Barossa Valley', 100),
   P('adelaide', 'Botanic Garden', 120),
   D('cardShop'),
@@ -103,6 +103,8 @@ const OUTER: Slot[] = [
   P('melbourne', 'St Kilda', 170),
   P('melbourne', 'Great Ocean Road', 200),
 ];
+const FORK = 5;
+const MERGE = 25;
 
 const SHORTCUT: Slot[] = [
   P('uluru', 'Alice Springs', 140),
@@ -113,25 +115,64 @@ const SHORTCUT: Slot[] = [
   D('points'),
 ];
 
-const W = 10;
-const H = 7;
-const FORK_I = 5;
+const PLOT_OFFSET = 118;
+const CENTRE = plane([134, -25]);
 
-function outerCell(k: number): { i: number; j: number; side: 'top' | 'right' | 'bottom' | 'left' } {
-  if (k <= W) return { i: k, j: 0, side: 'top' };
-  if (k <= W + H) return { i: W, j: k - W, side: 'right' };
-  if (k <= 2 * W + H) return { i: W - (k - W - H), j: H, side: 'bottom' };
-  return { i: 0, j: H - (k - 2 * W - H), side: 'left' };
+/** Space positions along the loop: pinned spaces sit on their points, the rest spread evenly between. */
+function outerSpaces() {
+  const PER = 24;
+  const curve = sampleCurve(LOOP.map(([lon, lat]) => plane([lon, lat])), true, PER);
+  const L = lengths(curve, true);
+  const pins = LOOP.flatMap(([, , k], i) => (k === null ? [] : [{ k, d: L[i * PER] }]));
+  pins.push({ k: OUTER.length, d: L[L.length - 1] });
+  const out: { p: Pt; dir: Pt }[] = [];
+  for (let n = 0; n + 1 < pins.length; n++) {
+    const a = pins[n];
+    const b = pins[n + 1];
+    for (let k = a.k; k < b.k; k++) out.push(pointAt(curve, L, a.d + ((b.d - a.d) * (k - a.k)) / (b.k - a.k)));
+  }
+  return { out, curve };
 }
 
 function build() {
   const roads: Road[] = [];
   const plots: Plot[] = [];
-  const add = (slot: Slot, i: number, j: number, pi: number, pj: number) => {
-    const road: Road = { id: roads.length, i, j, next: [], prev: [] };
+  const planePos: Pt[] = [];
+  const outer = outerSpaces();
+  const fork = outer.out[FORK].p;
+  const merge = outer.out[MERGE].p;
+  const shortCurve = sampleCurve([fork, ...SHORTCUT_VIA.map(plane), merge], false, 24);
+  const SL = lengths(shortCurve, false);
+  const short = SHORTCUT.map((_, k) => pointAt(shortCurve, SL, (SL[SL.length - 1] * (k + 1)) / (SHORTCUT.length + 1)));
+  const roadPoints = [...outer.curve, ...shortCurve];
+
+  const placePlot = (p: Pt, dir: Pt, preferLeft: boolean | null): Pt => {
+    const n: Pt = [-dir[1], dir[0]];
+    const a: Pt = [p[0] + n[0] * PLOT_OFFSET, p[1] + n[1] * PLOT_OFFSET];
+    const b: Pt = [p[0] - n[0] * PLOT_OFFSET, p[1] - n[1] * PLOT_OFFSET];
+    const score = (c: Pt) => {
+      let v = inside(c, MAINLAND_PLANE) ? 0 : 1000;
+      const nearRoad = Math.min(...roadPoints.map((q) => Math.hypot(q[0] - c[0], q[1] - c[1])));
+      if (nearRoad < PLOT_OFFSET * 0.8) v += 500;
+      const nearPlot = Math.min(Infinity, ...planePos.map((q) => Math.hypot(q[0] - c[0], q[1] - c[1])));
+      if (nearPlot < 150) v += 300;
+      return v + Math.hypot(c[0] - CENTRE[0], c[1] - CENTRE[1]) / 1000;
+    };
+    let sa = score(a);
+    let sb = score(b);
+    if (preferLeft !== null) (preferLeft ? (sa -= 0.5) : (sb -= 0.5));
+    const c = sa <= sb ? a : b;
+    planePos.push(c);
+    return c;
+  };
+
+  const add = (slot: Slot, at: { p: Pt; dir: Pt }, preferLeft: boolean | null) => {
+    const [x, y] = toWorld(at.p);
+    const road: Road = { id: roads.length, x, y, next: [], prev: [] };
     if ('disc' in slot) road.disc = slot.disc;
     else {
-      const plot: Plot = { id: plots.length, name: slot.plot, region: slot.region, price: slot.price, road: road.id, i: pi, j: pj };
+      const [px, py] = toWorld(placePlot(at.p, at.dir, preferLeft));
+      const plot: Plot = { id: plots.length, name: slot.plot, region: slot.region, price: slot.price, road: road.id, x: px, y: py };
       plots.push(plot);
       road.plot = plot.id;
     }
@@ -143,26 +184,32 @@ function build() {
     roads[b].prev.push(a);
   };
 
-  const outerIds = OUTER.map((slot, k) => {
-    const c = outerCell(k);
-    const out = { top: [c.i, c.j - 1], right: [c.i + 1, c.j], bottom: [c.i, c.j + 1], left: [c.i - 1, c.j] }[c.side];
-    return add(slot, c.i, c.j, out[0], out[1]);
-  });
+  const outerIds = OUTER.map((slot, k) => add(slot, outer.out[k], null));
   outerIds.forEach((id, k) => link(id, outerIds[(k + 1) % outerIds.length]));
+  const shortIds = SHORTCUT.map((slot, k) => add(slot, short[k], k % 2 === 0));
+  link(outerIds[FORK], shortIds[0]);
+  shortIds.forEach((id, k) => link(id, k + 1 < shortIds.length ? shortIds[k + 1] : outerIds[MERGE]));
 
-  const forkId = outerIds[FORK_I];
-  const mergeId = outerIds.find((id) => roads[id].i === FORK_I && roads[id].j === H)!;
-  const shortIds = SHORTCUT.map((slot, k) => {
-    const j = k + 1;
-    const side = k % 4 === 0 ? 1 : -1;
-    return add(slot, FORK_I, j, FORK_I + side, j);
+  // Each region's sign stands beyond one of its places, clear of the others.
+  const regions: Region[] = REGION_DEFS.map((r) => {
+    const mine = plots.filter((p) => p.region === r.id);
+    const free = (x: number, y: number) =>
+      plots.every((p) => Math.hypot(p.x - x, p.y - y) > 200) && roads.every((q) => Math.hypot(q.x - x, q.y - y) > 150);
+    for (const f of [1.3, 1.7, 2.1, 2.6]) {
+      for (const pl of [mine[1], mine[0], mine[2]]) {
+        const rd = roads[pl.road];
+        const x = pl.x + (pl.x - rd.x) * f;
+        const y = pl.y + (pl.y - rd.y) * f + 50;
+        if (free(x, y)) return { ...r, label: { x, y } };
+      }
+    }
+    return { ...r, label: { x: mine[1].x, y: mine[1].y + 90 } };
   });
-  link(forkId, shortIds[0]);
-  shortIds.forEach((id, k) => link(id, k + 1 < shortIds.length ? shortIds[k + 1] : mergeId));
-  return { roads, plots };
+  return { roads, plots, regions, outerCurve: outer.curve.map(toWorld), shortCurve: shortCurve.map(toWorld) };
 }
 
-export const { roads: ROADS, plots: PLOTS } = build();
+export const { roads: ROADS, plots: PLOTS, regions: REGIONS, outerCurve: OUTER_CURVE, shortCurve: SHORT_CURVE } = build();
+export const regionById = (id: string) => REGIONS.find((r) => r.id === id)!;
 export const START_ROAD = ROADS.find((r) => r.disc === 'start')!.id;
 export const HOSPITAL_ROAD = ROADS.find((r) => r.disc === 'hospital')!.id;
 export const JAIL_ROAD = ROADS.find((r) => r.disc === 'jail')!.id;

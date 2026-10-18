@@ -6,12 +6,12 @@ import { Avatar, money } from './common';
 import type { Overlay } from './useEventPlayer';
 
 const SEGMENTS = [
-  { n: 1, color: '#ff5a5f', d: 'M200 200 L200 20 A180 180 0 0 1 355.88 110 Z', tx: 260, ty: 118 },
-  { n: 2, color: '#ffc93c', d: 'M200 200 L355.88 110 A180 180 0 0 1 355.88 290 Z', tx: 320, ty: 222 },
-  { n: 3, color: '#22a45d', d: 'M200 200 L355.88 290 A180 180 0 0 1 200 380 Z', tx: 260, ty: 326 },
-  { n: 4, color: '#3a86ff', d: 'M200 200 L200 380 A180 180 0 0 1 44.12 290 Z', tx: 140, ty: 326 },
-  { n: 5, color: '#8f5cf7', d: 'M200 200 L44.12 290 A180 180 0 0 1 44.12 110 Z', tx: 80, ty: 222 },
-  { n: 6, color: '#ff8a1f', d: 'M200 200 L44.12 110 A180 180 0 0 1 200 20 Z', tx: 140, ty: 118 },
+  { n: 1, color: '#ff5a5f', d: 'M200 200 L200 20 A180 180 0 0 1 355.88 110 Z' },
+  { n: 2, color: '#ffc93c', d: 'M200 200 L355.88 110 A180 180 0 0 1 355.88 290 Z' },
+  { n: 3, color: '#22a45d', d: 'M200 200 L355.88 290 A180 180 0 0 1 200 380 Z' },
+  { n: 4, color: '#3a86ff', d: 'M200 200 L200 380 A180 180 0 0 1 44.12 290 Z' },
+  { n: 5, color: '#8f5cf7', d: 'M200 200 L44.12 290 A180 180 0 0 1 44.12 110 Z' },
+  { n: 6, color: '#ff8a1f', d: 'M200 200 L44.12 110 A180 180 0 0 1 200 20 Z' },
 ];
 
 function Wheel({ value, delay, size }: { value: number; delay: number; size: number }) {
@@ -40,8 +40,9 @@ function Wheel({ value, delay, size }: { value: number; delay: number; size: num
             <path key={s.n} d={s.d} fill={s.color} stroke="#fff" strokeWidth="4" />
           ))}
           <g className="wheel__nums">
+            {/* Each number faces outwards, so the one that stops under the pointer is upright. */}
             {SEGMENTS.map((s) => (
-              <text key={s.n} x={s.tx} y={s.ty} textAnchor="middle">
+              <text key={s.n} x="200" y="92" textAnchor="middle" transform={`rotate(${60 * s.n - 30} 200 200)`}>
                 {s.n}
               </text>
             ))}

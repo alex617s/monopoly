@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { setMusic } from './audio/sound';
 import { RuleError, createGame, reduce } from './game/engine';
 import type { Action, GameState } from './game/types';
 import { makeRoomCode, normaliseCode } from './net/protocol';
@@ -44,6 +45,8 @@ export function App() {
   const [screen, setScreen] = useState<Screen>(() => screenFromHash() ?? { name: 'home' });
   const [local, setLocal] = useState<GameState | null>(loadLocal);
   const [help, setHelp] = useState(false);
+
+  useEffect(() => setMusic('main'), []);
 
   useEffect(() => {
     const onHash = () => {

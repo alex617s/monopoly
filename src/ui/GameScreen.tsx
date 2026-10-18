@@ -1,4 +1,5 @@
-import { CSSProperties, ReactNode, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { audioSettings, setAudioSettings, setMusic, sfx, subscribeAudio } from '../audio/sound';
 import { GODS } from '../data/content';
 import { MiniMap } from '../map/MiniMap';
 import { Scene } from '../map/Scene';
@@ -49,6 +50,17 @@ export function GameScreen({ state, myIds, dispatch, isHost, deadline, onExit, e
   const pend = state.pending;
   const ready = !display.busy && !state.over && !!pend;
   const myTurnReady = ready && mine;
+
+  const audio = useSyncExternalStore(subscribeAudio, audioSettings);
+  const tense = !!state.lastRound && !state.over;
+  useEffect(() => {
+    setMusic(state.over ? null : tense ? 'last' : 'main');
+    return () => setMusic('main');
+  }, [tense, state.over]);
+  const forkNow = myTurnReady && pend?.kind === 'fork';
+  useEffect(() => {
+    if (forkNow) sfx('fork');
+  }, [forkNow]);
 
   useEffect(() => {
     if (!deadline) return;
@@ -248,6 +260,22 @@ export function GameScreen({ state, myIds, dispatch, isHost, deadline, onExit, e
           <button type="button" className="btn btn--wide" onClick={() => { setMenu(false); setHelp(true); }}>
             How to Play
           </button>
+          <div className="menu__row">
+            <button type="button" className={`btn ${audio.music ? 'btn--blue' : ''}`} onClick={() => setAudioSettings({ music: !audio.music })}>
+              Music: {audio.music ? 'ON' : 'OFF'}
+            </button>
+            <button type="button" className={`btn ${audio.sound ? 'btn--blue' : ''}`} onClick={() => setAudioSettings({ sound: !audio.sound })}>
+              Sound: {audio.sound ? 'ON' : 'OFF'}
+            </button>
+          </div>
+          <label className="menu__slider" htmlFor="music-volume">
+            Music volume
+            <input id="music-volume" type="range" min="0" max="100" value={Math.round(audio.musicVolume * 100)} onChange={(e) => setAudioSettings({ musicVolume: Number(e.target.value) / 100 })} />
+          </label>
+          <label className="menu__slider" htmlFor="sound-volume">
+            Sound volume
+            <input id="sound-volume" type="range" min="0" max="100" value={Math.round(audio.soundVolume * 100)} onChange={(e) => setAudioSettings({ soundVolume: Number(e.target.value) / 100 })} />
+          </label>
           {myIds.map((id) => {
             const p = state.players.find((x) => x.id === id);
             if (!p || p.out) return null;

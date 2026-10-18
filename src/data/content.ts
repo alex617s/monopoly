@@ -126,13 +126,12 @@ export interface CharacterDef {
   id: string;
   animal: string;
   color: string;
-  art?: string;
   lines: { buy: string[]; toll: string[]; build: string[]; ouch: string[] };
 }
 
 export const CHARACTERS: CharacterDef[] = [
-  { id: 'kangaroo', animal: 'Kangaroo', color: '#e8772e', art: 'tok-kangaroo', lines: { buy: ["G'day, this street is mine!", 'Hop hop, sold!'], toll: ['Thanks for the cash, mate!', 'Pay up, please!'], build: ['Up it goes!', 'Bigger and better!'], ouch: ['Strewth!', 'Not again!'] } },
-  { id: 'koala', animal: 'Koala', color: '#7a8798', art: 'tok-koala', lines: { buy: ['I will take this one, thanks.', 'A comfy spot for me!'], toll: ['Cheers for visiting!', 'Every bit helps!'], build: ['Time to build!', 'Cosy and tall!'], ouch: ['Oh no, my gum leaves!', 'Grumble grumble.'] } },
+  { id: 'kangaroo', animal: 'Kangaroo', color: '#e8772e', lines: { buy: ["G'day, this street is mine!", 'Hop hop, sold!'], toll: ['Thanks for the cash, mate!', 'Pay up, please!'], build: ['Up it goes!', 'Bigger and better!'], ouch: ['Strewth!', 'Not again!'] } },
+  { id: 'koala', animal: 'Koala', color: '#7a8798', lines: { buy: ['I will take this one, thanks.', 'A comfy spot for me!'], toll: ['Cheers for visiting!', 'Every bit helps!'], build: ['Time to build!', 'Cosy and tall!'], ouch: ['Oh no, my gum leaves!', 'Grumble grumble.'] } },
   { id: 'wombat', animal: 'Wombat', color: '#8a5a33', lines: { buy: ['Dig in, this is mine!', 'Good solid ground.'], toll: ['Pay the wombat toll!', 'Nice one!'], build: ['Dig, dig, build!', 'Stronger now!'], ouch: ['Ouch, my nose!', 'Bother!'] } },
   { id: 'quokka', animal: 'Quokka', color: '#d6342c', lines: { buy: ['Smile! I bought it!', 'Happiest buyer ever!'], toll: ['Thank you, friend!', 'Smile and pay!'], build: ['Look at it grow!', 'Yay, bigger!'], ouch: ['Aww, no fair!', 'Oopsie!'] } },
   { id: 'platypus', animal: 'Platypus', color: '#1b9aaa', lines: { buy: ['Splash! Mine now.', 'Quack-tastic buy!'], toll: ['Thanks for the splash cash!', 'Paddle over the money!'], build: ['Building a bigger burrow!', 'Swim up, level up!'], ouch: ['Blub blub, oh no!', 'That stings!'] } },

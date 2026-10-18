@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { setDuck } from '../audio/sound';
 import { characterById } from '../data/content';
 import type { MediaMesh } from '../net/media';
 import type { Member } from '../net/protocol';
@@ -17,6 +18,10 @@ export function CallPanel({ media, members, myPeerId, isHost, onMute, onRemove }
   const snap = useSyncExternalStore(media.subscribe, media.getSnapshot);
   const [joining, setJoining] = useState(false);
   const inCall = members.filter((m) => m.inCall && m.connected);
+  useEffect(() => {
+    setDuck(snap.inCall);
+    return () => setDuck(false);
+  }, [snap.inCall]);
 
   if (!snap.inCall) {
     return (

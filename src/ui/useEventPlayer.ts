@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { Sfx, sfx } from '../audio/sound';
+import { GODS } from '../data/content';
 import type { GameEvent, GameState } from '../game/types';
 
 export interface Bubble {
@@ -32,6 +34,20 @@ export interface Display {
   toasts: Toast[];
   pops: MoneyPop[];
   skip: () => void;
+}
+
+/** The sound that goes with a message from the rules. */
+function toastSound(text: string): Sfx | null {
+  if (/passed START/.test(text)) return 'start';
+  if (/goes to Jail/.test(text)) return 'jail';
+  if (/goes to Hospital/.test(text)) return 'hospital';
+  if (/banana|SPLASH/i.test(text)) return 'banana';
+  if (/firework|BOOM/i.test(text)) return 'rocket';
+  if (/ built |Angel built| turned /.test(text)) return 'build';
+  if (/ card/.test(text)) return 'card';
+  if (/ bought .+ for \$/.test(text)) return 'buy';
+  if (/the bank\.$/.test(text)) return 'bank';
+  return null;
 }
 
 const positions = (s: GameState) => Object.fromEntries(s.players.map((p) => [p.id, p.pos]));
@@ -100,6 +116,7 @@ export function useEventPlayer(state: GameState): Display {
         return;
       case 'spin':
         setFocus(e.playerId);
+        sfx('spin');
         setOverlay({ kind: 'spin', playerId: e.playerId, wheels: e.wheels, remote: e.remote });
         await wait(2300);
         setOverlay(null);
@@ -107,6 +124,7 @@ export function useEventPlayer(state: GameState): Display {
       case 'step':
         setFocus(e.playerId);
         setHopping(e.playerId);
+        sfx('step');
         setPos((p) => ({ ...p, [e.playerId]: e.to }));
         await sleep(270);
         setHopping(null);
@@ -119,6 +137,8 @@ export function useEventPlayer(state: GameState): Display {
         return;
       case 'toast': {
         const key = e.seq;
+        const sound = toastSound(e.text);
+        if (sound) sfx(sound);
         setToasts((t) => [...t.slice(-3), { key, text: e.text, tone: e.tone }]);
         setTimeout(() => setToasts((t) => t.filter((x) => x.key !== key)), 3200);
         await sleep(120);
@@ -132,29 +152,35 @@ export function useEventPlayer(state: GameState): Display {
       }
       case 'money': {
         const key = e.seq;
+        sfx(e.amount > 0 ? 'coin' : 'pay');
         setPops((p) => [...p, { key, playerId: e.playerId, amount: e.amount }]);
         setTimeout(() => setPops((p) => p.filter((x) => x.key !== key)), 1800);
         return;
       }
       case 'god':
+        if (e.joined) sfx(GODS[e.god].good ? 'goodGod' : 'badGod');
         await sleep(200);
         return;
       case 'news':
+        sfx('news');
         setOverlay({ kind: 'news', headline: e.headline, text: e.text, day: e.day });
         await wait(3600);
         setOverlay(null);
         return;
       case 'chance':
+        sfx('chance');
         setOverlay({ kind: 'chance', playerId: e.playerId, text: e.text });
         await wait(2800);
         setOverlay(null);
         return;
       case 'lastRound':
+        sfx('lastRound');
         setOverlay({ kind: 'lastRound' });
         await wait(2600);
         setOverlay(null);
         return;
       case 'over':
+        sfx('win');
         await sleep(400);
         return;
     }
