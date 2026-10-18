@@ -31,10 +31,55 @@ const polyline = (pts: Pt[], closed: boolean) => 'M' + pts.map((p) => `${r1(p[0]
 const LAND = [MAINLAND_PLANE.map(toWorld), TASMANIA_PLANE.map(toWorld)].map((pts) => smoothPath(pts, true, 1));
 const ULURU = lonLatToWorld([131.0, -24.8]);
 
-const LANDMARKS: { name: string; at: LonLat; w: number }[] = [
-  { name: 'landmark-opera', at: [152.5, -34.4], w: 230 },
-  { name: 'landmark-bridge', at: [152.1, -35.9], w: 250 },
+/** One landmark for each place, standing near its real spot. `sea` ones may sit in the water. */
+const LANDMARK_SPOTS: { name: string; at: LonLat; w: number; sea?: boolean }[] = [
+  { name: 'landmark-opera', at: [152.0, -33.7], w: 220, sea: true },
+  { name: 'landmark-bridge', at: [152.2, -34.5], w: 230, sea: true },
+  { name: 'landmark-parliament', at: [148.6, -35.5], w: 220 },
+  { name: 'landmark-flinders', at: [143.6, -36.6], w: 210 },
+  { name: 'landmark-brisbane', sea: true, at: [152.2, -27.2], w: 230 },
+  { name: 'landmark-goldcoast', at: [154.2, -28.4], w: 220, sea: true },
+  { name: 'landmark-reef', at: [148.4, -17.6], w: 230, sea: true },
+  { name: 'landmark-croc', at: [131.4, -13.6], w: 210 },
+  { name: 'landmark-uluru', at: [131.0, -24.9], w: 280 },
+  { name: 'landmark-outback', at: [139.6, -23.0], w: 230 },
+  { name: 'landmark-perth', sea: true, at: [114.4, -31.9], w: 210 },
+  { name: 'landmark-adelaide', sea: true, at: [137.6, -35.3], w: 210 },
+  { name: 'landmark-hobart', at: [148.9, -42.6], w: 190, sea: true },
 ];
+
+/** Finds the nearest spot to each landmark's home where it covers no road or place. */
+const LANDMARKS: { name: string; x: number; y: number; w: number }[] = (() => {
+  const roadPts = ROAD_CURVES.flatMap((c) => c.pts.filter((_, i) => i % 2 === 0));
+  const placed: { x: number; y: number; r: number }[] = [];
+  return LANDMARK_SPOTS.map((lm) => {
+    const [hx, hy] = lonLatToWorld(lm.at);
+    // Try full size close to home first, then a little smaller, then further away.
+    for (const [scale, reach] of [[1, 330], [0.8, 330], [0.65, 360], [0.55, 300], [0.65, 900]]) {
+      const w = lm.w * scale;
+      const r = w * 0.42;
+      const clear = (x: number, y: number) => {
+        const cy = y - w * 0.25; // the middle of the picture, above its base
+        if (!lm.sea && !inside(fromWorld([x, y]), MAINLAND_PLANE) && !inside(fromWorld([x, y]), TASMANIA_PLANE)) return false;
+        if (roadPts.some((q) => Math.hypot(q[0] - x, q[1] - cy) < r + 40 || Math.hypot(q[0] - x, q[1] - y) < 50)) return false;
+        if (PLOTS.some((pl) => Math.hypot(pl.x - x, pl.y - 40 - cy) < r + 70)) return false;
+        if (REGIONS.some((rg) => Math.hypot(rg.label.x - x, rg.label.y - 70 - cy) < r + 60)) return false;
+        return placed.every((o) => Math.hypot(o.x - x, o.y - y) > o.r + r);
+      };
+      for (let d = 0; d <= reach; d += 30) {
+        for (let k = 0; k < (d ? 24 : 1); k++) {
+          const x = hx + Math.cos((k * Math.PI) / 12) * d;
+          const y = hy + Math.sin((k * Math.PI) / 12) * d * 0.75;
+          if (clear(x, y)) {
+            placed.push({ x, y, r });
+            return { name: lm.name, x, y, w };
+          }
+        }
+      }
+    }
+    return { name: lm.name, x: hx, y: hy, w: lm.w * 0.65 };
+  });
+})();
 
 /** Positions to keep scenery away from. */
 function busySpots(): { p: Pt; r: number }[] {
@@ -43,8 +88,7 @@ function busySpots(): { p: Pt; r: number }[] {
   for (const pl of PLOTS) out.push({ p: [pl.x, pl.y], r: 120 });
   for (const rd of ROADS) out.push({ p: [rd.x, rd.y], r: 80 });
   for (const rg of REGIONS) out.push({ p: [rg.label.x, rg.label.y], r: 110 });
-  for (const lm of LANDMARKS) out.push({ p: lonLatToWorld(lm.at), r: 150 });
-  out.push({ p: ULURU, r: 190 });
+  for (const lm of LANDMARKS) out.push({ p: [lm.x, lm.y - lm.w * 0.25], r: lm.w * 0.55 });
   return out;
 }
 
@@ -71,23 +115,8 @@ function scenery(): [number, string][] {
     const w = name === 'prop-rock' ? 92 : name === 'prop-flowers' ? 80 : 110 + rand() * 20;
     items.push([p[1], sprite(name, p[0], p[1], w, w * 0.12)]);
   }
-  // a little skyline at each big city, and farms in the country
+  // farms in the country
   const free = (p: Pt, r: number) => busy.every((b) => Math.hypot(b.p[0] - p[0], b.p[1] - p[1]) > Math.min(b.r, r)) && placed.every((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) > 90);
-  for (const rg of REGIONS.filter((r) => r.capital && r.id !== 'sydney' && r.id !== 'canberra')) {
-    let n = 0;
-    for (let ring = 1; ring <= 3 && n < 2; ring++) {
-      for (let a = 0; a < 10 && n < 2; a++) {
-        const ang = (a / 10) * Math.PI * 2 + ring;
-        const p: Pt = [rg.label.x + Math.cos(ang) * 95 * ring, rg.label.y + Math.sin(ang) * 66 * ring];
-        if (!inside(fromWorld(p), MAINLAND_PLANE) && !inside(fromWorld(p), TASMANIA_PLANE)) continue;
-        if (!free(p, 80)) continue;
-        placed.push(p);
-        const tall = n % 3 === 0 ? 'build-5' : n % 3 === 1 ? 'build-4' : 'build-3';
-        items.push([p[1], sprite(tall, p[0], p[1], 130, 30)]);
-        n++;
-      }
-    }
-  }
   for (let k = 0, farms = 0; k < 600 && farms < 6; k++) {
     const lon = 114 + rand() * 40;
     const lat = -29 - rand() * 9;
@@ -104,14 +133,7 @@ function scenery(): [number, string][] {
     const rd = ROADS[k];
     items.push([rd.y - 70, sprite('prop-sign', rd.x + 70, rd.y - 70, 70, 6)]);
   }
-  // Uluru: a big red rock with smaller ones around it
-  items.push([ULURU[1], sprite('prop-rock', ULURU[0], ULURU[1], 280, 30)]);
-  items.push([ULURU[1] + 30, sprite('prop-rock', ULURU[0] - 150, ULURU[1] + 30, 120, 14)]);
-  items.push([ULURU[1] + 10, sprite('prop-rock', ULURU[0] + 160, ULURU[1] + 10, 110, 14)]);
-  for (const lm of LANDMARKS) {
-    const [x, y] = lonLatToWorld(lm.at);
-    items.push([y, sprite(lm.name, x, y, lm.w, lm.w * 0.2)]);
-  }
+  for (const lm of LANDMARKS) items.push([lm.y, sprite(lm.name, lm.x, lm.y, lm.w, lm.w * 0.15)]);
   return items;
 }
 
@@ -236,7 +258,7 @@ export function staticSvg(): string {
   const items = scenery().sort((a, b) => a[0] - b[0]);
   out.push(...items.map((i) => i[1]));
   for (const [a, b] of FLIGHTS) out.push(flightPath(ROADS[a], ROADS[b]));
-  const STATES: [string, LonLat][] = [['WESTERN AUSTRALIA', [121.5, -25.5]], ['NORTHERN TERRITORY', [133.5, -19.5]], ['SOUTH AUSTRALIA', [134.5, -29.6]], ['QUEENSLAND', [144.5, -22.5]], ['NEW SOUTH WALES', [146.2, -30.9]], ['VICTORIA', [143.6, -37.0]], ['TASMANIA', [149.6, -43.0]], ['ACT', [149.3, -35.9]]];
+  const STATES: [string, LonLat][] = [['WESTERN AUSTRALIA', [121.5, -25.5]], ['NORTHERN TERRITORY', [133.5, -19.5]], ['SOUTH AUSTRALIA', [134.5, -29.6]], ['QUEENSLAND', [144.5, -22.5]], ['NEW SOUTH WALES', [146.2, -30.9]], ['VICTORIA', [143.6, -37.0]], ['TASMANIA', [150.6, -43.6]], ['ACT', [149.3, -35.9]]];
   for (const [name, at] of STATES) {
     const [x, y] = lonLatToWorld(at);
     out.push(`<text x="${r1(x)}" y="${r1(y)}" text-anchor="middle" class="state-name${name === 'ACT' ? ' state-name--small' : ''}">${name}</text>`);

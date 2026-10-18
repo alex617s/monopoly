@@ -25,10 +25,8 @@ The map and pieces use the PNG files in `public/art/`. Upload new or replacement
 pictures there with the same names. `npm run build` shrinks them automatically
 (`scripts/optimize-art.mjs`), so large originals are fine.
 
-Still to come (the map works without them): `landmark-uluru`, `landmark-goldcoast`,
-`landmark-reef`, `landmark-croc`, `landmark-tram`, `landmark-lighthouse`,
-`landmark-vineyard`, `prop-boat`, `prop-whale`, `vehicle-scooter`, `vehicle-car`,
-`shopkeeper-card`, `shopkeeper-item`.
+Still to come (the game works without them): `prop-boat`, `prop-whale`,
+`vehicle-scooter`, `vehicle-car`, `shopkeeper-card`, `shopkeeper-item`, `home`.
 
 ## Sound
 
