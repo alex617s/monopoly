@@ -35,12 +35,19 @@ export interface PlotState {
   special: SpecialId | null;
 }
 
+export interface Pickup {
+  kind: 'cash' | 'points' | 'crate';
+  amount: number;
+}
+
 export type Pending =
   | { kind: 'pre' }
   | { kind: 'release'; fee: number; place: 'hospital' | 'jail' }
   | { kind: 'fork'; options: number[] }
   | { kind: 'buy'; plot: number }
-  | { kind: 'build'; plot: number; max: number }
+  /** Build one level here? `left` levels may still be built this time. */
+  | { kind: 'build'; plot: number; step: number; left: number; passing: boolean }
+  | { kind: 'flight'; to: number; fee: number }
   | { kind: 'bank'; passing: boolean }
   | { kind: 'shop'; shop: 'card' | 'item' };
 
@@ -56,6 +63,8 @@ export type GameEvent =
   | { seq: number; type: 'god'; playerId: string; god: GodId; joined: boolean }
   | { seq: number; type: 'turn'; playerId: string }
   | { seq: number; type: 'lastRound' }
+  | { seq: number; type: 'notice'; playerId: string | null; title: string; text: string; art: string | null; tone: 'good' | 'bad' | 'info'; days: number | null }
+  | { seq: number; type: 'build'; playerId: string; plot: number; level: number }
   | { seq: number; type: 'over' };
 
 type Dist<T> = T extends unknown ? Omit<T, 'seq'> : never;
@@ -72,6 +81,9 @@ export interface GameState {
   move: { left: number } | null;
   roadblocks: Record<number, string>;
   bananas: Record<number, string>;
+  bombs: Record<number, string>;
+  /** Things lying on the road, collected by whoever walks over them. */
+  pickups: Record<number, Pickup>;
   mapGods: Record<number, { id: GodId; days: number }>;
   priceUp: Record<string, { by: string; days: number }>;
   boomRegion: string | null;
@@ -91,6 +103,7 @@ export type Action =
   | { type: 'useItem'; index: number; target?: string; plot?: number; distance?: number; value?: number }
   | { type: 'fork'; to: number }
   | { type: 'buy'; yes: boolean }
+  | { type: 'fly'; yes: boolean }
   | { type: 'build'; levels: number }
   | { type: 'bank'; amount: number }
   | { type: 'shopBuy'; id: string }

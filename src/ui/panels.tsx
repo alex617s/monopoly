@@ -43,26 +43,44 @@ export function BuyPanel({ state, plot, dispatch }: { state: GameState; plot: nu
   );
 }
 
-export function BuildPanel({ state, plot, max, dispatch }: { state: GameState; plot: number; max: number; dispatch: Dispatch }) {
+export function BuildPanel({ state, plot, step, passing, dispatch }: { state: GameState; plot: number; step: number; passing: boolean; dispatch: Dispatch }) {
   const info = PLOTS[plot];
   const level = state.plots[plot].level;
   const cost = buildCost(plot);
+  const next = BUILDINGS[Math.min(RULES.maxLevel, level + 1)];
   return (
     <div className="decision">
       <p className="decision__title">
-        Build on <b>{info.name}</b>?
+        {step > 1 ? 'Build one more level' : passing ? 'Passing your land' : 'Your land'}: <b>{info.name}</b>
       </p>
       <p className="decision__sub">
-        Now: {BUILDINGS[level]} · each level costs {money(cost)}
+        {BUILDINGS[level]} → <b>{next}</b> for {money(cost)}
       </p>
       <div className="decision__buttons">
-        {Array.from({ length: max }, (_, k) => k + 1).map((n) => (
-          <button key={n} type="button" className="btn btn--go btn--big" onClick={() => dispatch({ type: 'build', levels: n })}>
-            {BUILDINGS[level + n]} · {money(cost * n)}
-          </button>
-        ))}
+        <button type="button" className="btn btn--go btn--big" disabled={state.players[state.current].cash < cost} onClick={() => dispatch({ type: 'build', levels: 1 })}>
+          Build a {next}
+        </button>
         <button type="button" className="btn btn--big" onClick={() => dispatch({ type: 'build', levels: 0 })}>
           Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function FlightPanel({ to, fee, dispatch }: { to: number; fee: number; dispatch: Dispatch }) {
+  const far = PLOTS.find((pl) => pl.road > to - 3 && pl.road < to + 3);
+  const city = far ? regionById(far.region).name : 'the other airport';
+  return (
+    <div className="decision">
+      <p className="decision__title">✈ Fly to {city.charAt(0) + city.slice(1).toLowerCase()}?</p>
+      <p className="decision__sub">A plane ticket costs {money(fee)}. You land at the other airport.</p>
+      <div className="decision__buttons">
+        <button type="button" className="btn btn--blue btn--big" onClick={() => dispatch({ type: 'fly', yes: true })}>
+          Fly for {money(fee)}
+        </button>
+        <button type="button" className="btn btn--big" onClick={() => dispatch({ type: 'fly', yes: false })}>
+          Stay here
         </button>
       </div>
     </div>
@@ -506,10 +524,11 @@ export function HowToPlay({ onClose }: { onClose: () => void }) {
       <h2>How to Play</h2>
       <ol>
         <li>Everyone starts in Sydney with {money(RULES.startCash)}. Pass START to collect {money(RULES.startBonus)}.</li>
-        <li>Tap SPIN. Walk the roads of Australia. At the fork near Gold Coast, pick a way.</li>
-        <li>Stop next to empty land to buy it. Stop at your own land to build up to 2 levels; pass it to build 1 level.</li>
+        <li>Tap SPIN and travel around Australia. At a crossroads, tap a sign to pick your way: along the coast, through the desert past Uluru, down the Stuart Highway, via Canberra, or by ferry to Tasmania.</li>
+        <li>Stop next to empty land to buy it. Stop on your own land to build, one level at a time (up to 2). Walk past it and you may pay to build 1 level.</li>
         <li>Buildings go Tent, Cabin, Holiday House, Hotel, Skyscraper. Bigger buildings mean bigger tolls!</li>
-        <li>Collect points and spend them in the Card Shop and Item Shop. Use one card and one item before you spin.</li>
+        <li>Pick up money bags, points and mystery boxes lying on the road. Fly between Sydney and Perth airports for {money(RULES.flightFee)}.</li>
+        <li>Collect points and spend them in the Card Shop and Item Shop. Use one card and one item before you spin. Watch out for bananas, bombs and Monster Trucks!</li>
         <li>Gods appear on the road. Good ones help for 3 days. Pass a bad one to a friend by walking past them!</li>
         <li>Run out of money and the bank rescues you once. The second time you are out.</li>
         <li>The host taps End Game for a last round. The richest explorer wins!</li>

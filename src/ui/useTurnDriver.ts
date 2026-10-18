@@ -16,6 +16,8 @@ export function animationMs(events: GameEvent[]) {
     else if (e.type === 'lastRound') ms += 2700;
     else if (e.type === 'toast') ms += 120;
     else if (e.type === 'turn') ms += 150;
+    else if (e.type === 'notice') ms += 2700;
+    else if (e.type === 'build') ms += 1550;
   }
   return ms;
 }

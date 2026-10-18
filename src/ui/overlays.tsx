@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { characterById } from '../data/content';
 import { landValue } from '../game/engine';
 import type { GameState } from '../game/types';
-import { Avatar, money } from './common';
+import { Avatar, art, money } from './common';
 import type { Overlay } from './useEventPlayer';
 
 const SEGMENTS = [
@@ -91,6 +91,27 @@ export function OverlayView({ overlay, state, onSkip }: { overlay: Overlay; stat
             <h2>{overlay.headline}</h2>
             <p>{overlay.text}</p>
           </div>
+        </div>
+      </div>
+    );
+  }
+  if (overlay.kind === 'notice') {
+    const p = overlay.playerId ? player(overlay.playerId) : null;
+    return (
+      <div className="overlay overlay--dim" onClick={onSkip}>
+        <div className={`notice notice--${overlay.tone}`}>
+          <div className="notice__pic">
+            {overlay.art ? <img src={art(overlay.art)} alt="" /> : p ? <Avatar character={p.character} size={96} ring={p.color} /> : null}
+            {overlay.days !== null && (
+              <span className="notice__days">
+                <b>{overlay.days}</b>
+                <small>{overlay.days === 1 ? 'day' : 'days'}</small>
+              </span>
+            )}
+          </div>
+          <h2>{overlay.title}</h2>
+          <p>{overlay.text}</p>
+          <span className="notice__tap">Tap to close</span>
         </div>
       </div>
     );

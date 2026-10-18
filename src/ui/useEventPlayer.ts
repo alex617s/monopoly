@@ -22,7 +22,8 @@ export type Overlay =
   | { kind: 'news'; headline: string; text: string; day: number }
   | { kind: 'chance'; playerId: string; text: string }
   | { kind: 'lastRound' }
-  | { kind: 'spin'; playerId: string; wheels: number[]; remote: boolean };
+  | { kind: 'spin'; playerId: string; wheels: number[]; remote: boolean }
+  | { kind: 'notice'; playerId: string | null; title: string; text: string; art: string | null; tone: 'good' | 'bad' | 'info'; days: number | null };
 
 export interface Display {
   pos: Record<string, number>;
@@ -33,6 +34,8 @@ export interface Display {
   bubbles: Bubble[];
   toasts: Toast[];
   pops: MoneyPop[];
+  /** A building going up right now, which the map animates. */
+  building: { plot: number; level: number; key: number } | null;
   skip: () => void;
 }
 
@@ -66,6 +69,7 @@ export function useEventPlayer(state: GameState): Display {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pops, setPops] = useState<MoneyPop[]>([]);
+  const [building, setBuilding] = useState<Display['building']>(null);
   const lastSeq = useRef(state.eventSeq);
   const queue = useRef<GameEvent[]>([]);
   const running = useRef(false);
@@ -159,6 +163,7 @@ export function useEventPlayer(state: GameState): Display {
       }
       case 'god':
         if (e.joined) sfx(GODS[e.god].good ? 'goodGod' : 'badGod');
+        // the notice card that follows has its own sound
         await sleep(200);
         return;
       case 'news':
@@ -179,6 +184,18 @@ export function useEventPlayer(state: GameState): Display {
         await wait(2600);
         setOverlay(null);
         return;
+      case 'notice':
+        if (!e.art?.startsWith('god-')) sfx(e.tone === 'bad' ? 'badGod' : e.tone === 'good' ? 'chance' : 'card');
+        setOverlay({ kind: 'notice', playerId: e.playerId, title: e.title, text: e.text, art: e.art, tone: e.tone, days: e.days });
+        await wait(2600);
+        setOverlay(null);
+        return;
+      case 'build':
+        sfx('build');
+        setBuilding({ plot: e.plot, level: e.level, key: e.seq });
+        await sleep(1500);
+        setBuilding(null);
+        return;
       case 'over':
         sfx('win');
         await sleep(400);
@@ -186,5 +203,5 @@ export function useEventPlayer(state: GameState): Display {
     }
   }
 
-  return { pos, hopping, focus, busy, overlay, bubbles, toasts, pops, skip: () => skipWait.current?.() };
+  return { pos, hopping, focus, busy, overlay, bubbles, toasts, pops, building, skip: () => skipWait.current?.() };
 }

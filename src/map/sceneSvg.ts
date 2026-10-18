@@ -3,8 +3,8 @@
 // the game changes. Pictures come from public/art.
 
 import { GODS } from '../data/content';
-import { LonLat, MAINLAND_PLANE, Pt, TASMANIA_PLANE, WORLD_H, WORLD_W, inside, lonLatToWorld, plane, smoothPath, toWorld } from '../data/geo';
-import { DISC_INFO, OUTER_CURVE, PLOTS, REGIONS, ROADS, SHORT_CURVE, regionById } from '../data/map';
+import { LonLat, MAINLAND_PLANE, Pt, TASMANIA_PLANE, WORLD_H, WORLD_W, fromWorld, inside, lonLatToWorld, plane, smoothPath, toWorld } from '../data/geo';
+import { DISC_INFO, FLIGHTS, PLOTS, REGIONS, ROADS, ROAD_CURVES, regionById } from '../data/map';
 import type { SpecialId } from '../data/rules';
 import type { GameState } from '../game/types';
 import { art } from '../ui/common';
@@ -29,7 +29,7 @@ const polyline = (pts: Pt[], closed: boolean) => 'M' + pts.map((p) => `${r1(p[0]
 // ------------------------------------------------------------------ static layer
 
 const LAND = [MAINLAND_PLANE.map(toWorld), TASMANIA_PLANE.map(toWorld)].map((pts) => smoothPath(pts, true, 1));
-const ULURU = lonLatToWorld([131.4, -24.9]);
+const ULURU = lonLatToWorld([131.0, -24.8]);
 
 const LANDMARKS: { name: string; at: LonLat; w: number }[] = [
   { name: 'landmark-opera', at: [152.5, -34.4], w: 230 },
@@ -39,8 +39,7 @@ const LANDMARKS: { name: string; at: LonLat; w: number }[] = [
 /** Positions to keep scenery away from. */
 function busySpots(): { p: Pt; r: number }[] {
   const out: { p: Pt; r: number }[] = [];
-  for (const q of OUTER_CURVE.filter((_, i) => i % 3 === 0)) out.push({ p: q, r: 70 });
-  for (const q of SHORT_CURVE.filter((_, i) => i % 3 === 0)) out.push({ p: q, r: 70 });
+  for (const c of ROAD_CURVES) for (const q of c.pts.filter((_, i) => i % 3 === 0)) out.push({ p: q, r: 70 });
   for (const pl of PLOTS) out.push({ p: [pl.x, pl.y], r: 120 });
   for (const rd of ROADS) out.push({ p: [rd.x, rd.y], r: 80 });
   for (const rg of REGIONS) out.push({ p: [rg.label.x, rg.label.y], r: 110 });
@@ -54,7 +53,7 @@ function scenery(): [number, string][] {
   const items: [number, string][] = [];
   const busy = busySpots();
   const placed: Pt[] = [];
-  for (let k = 0; k < 2600 && placed.length < 150; k++) {
+  for (let k = 0; k < 2600 && placed.length < 75; k++) {
     const lon = 113.5 + rand() * 40.5;
     const lat = -11.5 - rand() * 27;
     if (!inside(plane([lon, lat]), MAINLAND_PLANE)) continue;
@@ -72,6 +71,34 @@ function scenery(): [number, string][] {
     const w = name === 'prop-rock' ? 92 : name === 'prop-flowers' ? 80 : 110 + rand() * 20;
     items.push([p[1], sprite(name, p[0], p[1], w, w * 0.12)]);
   }
+  // a little skyline at each big city, and farms in the country
+  const free = (p: Pt, r: number) => busy.every((b) => Math.hypot(b.p[0] - p[0], b.p[1] - p[1]) > Math.min(b.r, r)) && placed.every((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) > 90);
+  for (const rg of REGIONS.filter((r) => r.capital && r.id !== 'sydney' && r.id !== 'canberra')) {
+    let n = 0;
+    for (let ring = 1; ring <= 3 && n < 2; ring++) {
+      for (let a = 0; a < 10 && n < 2; a++) {
+        const ang = (a / 10) * Math.PI * 2 + ring;
+        const p: Pt = [rg.label.x + Math.cos(ang) * 95 * ring, rg.label.y + Math.sin(ang) * 66 * ring];
+        if (!inside(fromWorld(p), MAINLAND_PLANE) && !inside(fromWorld(p), TASMANIA_PLANE)) continue;
+        if (!free(p, 80)) continue;
+        placed.push(p);
+        const tall = n % 3 === 0 ? 'build-5' : n % 3 === 1 ? 'build-4' : 'build-3';
+        items.push([p[1], sprite(tall, p[0], p[1], 130, 30)]);
+        n++;
+      }
+    }
+  }
+  for (let k = 0, farms = 0; k < 600 && farms < 6; k++) {
+    const lon = 114 + rand() * 40;
+    const lat = -29 - rand() * 9;
+    if (lon > 120 && lon < 139) continue;
+    if (!inside(plane([lon, lat]), MAINLAND_PLANE)) continue;
+    const p = lonLatToWorld([lon, lat]);
+    if (!free(p, 120)) continue;
+    placed.push(p);
+    items.push([p[1], sprite('build-2', p[0], p[1], 120, 28)]);
+    farms++;
+  }
   // kangaroo crossing signs by the road
   for (const k of [3, 21, 30]) {
     const rd = ROADS[k];
@@ -85,8 +112,18 @@ function scenery(): [number, string][] {
     const [x, y] = lonLatToWorld(lm.at);
     items.push([y, sprite(lm.name, x, y, lm.w, lm.w * 0.2)]);
   }
-  for (const rg of REGIONS) items.push([rg.label.y, regionSign(rg.label.x, rg.label.y, rg.name, rg.color)]);
   return items;
+}
+
+function flightPath(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const mx = (a.x + b.x) / 2;
+  const my = Math.min(a.y, b.y) - 520;
+  const d = `M${r1(a.x)} ${r1(a.y - 20)} Q${r1(mx)} ${r1(my)} ${r1(b.x)} ${r1(b.y - 20)}`;
+  // a little plane halfway along the curve
+  const px = (a.x + 2 * mx + b.x) / 4;
+  const py = (a.y + 2 * my + b.y) / 4 - 20;
+  return `<path d="${d}" fill="none" stroke="#fff" stroke-width="8" stroke-dasharray="2 26" stroke-linecap="round" opacity=".9"/>
+<g transform="translate(${r1(px)},${r1(py)}) rotate(${a.x > b.x ? 180 : 0}) scale(1.6)"><path d="M-30 0 L30 -4 Q40 0 30 4 Z" fill="#fff" stroke="#1b6fc2" stroke-width="3"/><path d="M-2 -2 L-14 -26 L-4 -26 L12 -2Z M-2 2 L-14 26 L-4 26 L12 2Z M-26 -1 L-34 -12 L-28 -12 L-20 -1Z" fill="#e5383b" stroke="#fff" stroke-width="2"/></g>`;
 }
 
 function regionSign(x: number, y: number, text: string, color: string) {
@@ -143,15 +180,50 @@ export function staticSvg(): string {
   out.push(`<ellipse cx="${r1(lake[0])}" cy="${r1(lake[1])}" rx="80" ry="30" fill="#f4f1e6" stroke="#8fd8ee" stroke-width="6"/>`);
   out.push(`<path d="${smoothPath(([[148.6, -36.3], [146.2, -35.8], [143.6, -34.7], [141.4, -34.2], [139.6, -34.6], [139.3, -35.6]] as LonLat[]).map(lonLatToWorld), false)}" stroke="#4fb3ec" stroke-width="13" fill="none" stroke-linecap="round"/>`);
 
-  // the road
-  const roads: [Pt[], boolean][] = [
-    [OUTER_CURVE, true],
-    [SHORT_CURVE, false],
+  // state borders and names, so you can learn where everything is
+  const BORDERS: LonLat[][] = [
+    [[129, -14.9], [129, -31.7]],
+    [[129, -26], [141, -26]],
+    [[138, -16.6], [138, -26]],
+    [[141, -26], [141, -29], [149, -29], [151.2, -28.6], [153.5, -28.2]],
+    [[141, -29], [141, -38.05]],
+    [[141, -34.1], [143.5, -35.3], [146, -35.95], [148.2, -36.8], [149.98, -37.5]],
   ];
-  for (const [p, c] of roads) out.push(`<path d="${polyline(p, c)}" fill="none" stroke="#000" stroke-width="72" opacity=".2" transform="translate(0,9)" stroke-linejoin="round" stroke-linecap="round"/>`);
-  for (const [p, c] of roads) out.push(`<path d="${polyline(p, c)}" fill="none" stroke="#f3f1e7" stroke-width="66" stroke-linejoin="round" stroke-linecap="round"/>`);
-  for (const [p, c] of roads) out.push(`<path d="${polyline(p, c)}" fill="none" stroke="#5c6177" stroke-width="54" stroke-linejoin="round" stroke-linecap="round"/>`);
-  for (const [p, c] of roads) out.push(`<path d="${polyline(p, c)}" fill="none" stroke="#ffd23f" stroke-width="5" stroke-dasharray="22 20"/>`);
+  for (const line of BORDERS) {
+    const pts = line.flatMap((p, i) => (i === 0 ? [p] : Array.from({ length: 12 }, (_, k): LonLat => [line[i - 1][0] + ((p[0] - line[i - 1][0]) * (k + 1)) / 12, line[i - 1][1] + ((p[1] - line[i - 1][1]) * (k + 1)) / 12])));
+    out.push(`<path d="${polyline(pts.map(lonLatToWorld), false)}" fill="none" stroke="#fff" stroke-width="6" stroke-dasharray="18 14" opacity=".55" stroke-linecap="round"/>`);
+  }
+  const act = lonLatToWorld([149.0, -35.45]);
+  out.push(`<ellipse cx="${r1(act[0])}" cy="${r1(act[1])}" rx="70" ry="44" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="12 10" opacity=".6"/>`);
+  // the road
+  // Roads on land; where a route crosses the sea it is a ferry lane instead.
+  const runs: { pts: Pt[]; closed: boolean; land: boolean }[] = [];
+  for (const c of ROAD_CURVES) {
+    if (c.land.every(Boolean)) {
+      runs.push({ pts: c.pts, closed: c.closed, land: true });
+      continue;
+    }
+    let cur: Pt[] = [c.pts[0]];
+    let land = c.land[0];
+    for (let i = 1; i < c.pts.length; i++) {
+      cur.push(c.pts[i]);
+      if (c.land[i] !== land) {
+        runs.push({ pts: cur, closed: false, land });
+        cur = [c.pts[i]];
+        land = c.land[i];
+      }
+    }
+    runs.push({ pts: cur, closed: false, land });
+  }
+  const roadRuns = runs.filter((r) => r.land);
+  for (const r of runs.filter((x) => !x.land)) {
+    out.push(`<path d="${polyline(r.pts, false)}" fill="none" stroke="#bff3ff" stroke-width="40" opacity=".55" stroke-linecap="round"/>`);
+    out.push(`<path d="${polyline(r.pts, false)}" fill="none" stroke="#fff" stroke-width="7" stroke-dasharray="4 22" stroke-linecap="round"/>`);
+  }
+  for (const r of roadRuns) out.push(`<path d="${polyline(r.pts, r.closed)}" fill="none" stroke="#000" stroke-width="72" opacity=".2" transform="translate(0,9)" stroke-linejoin="round" stroke-linecap="round"/>`);
+  for (const r of roadRuns) out.push(`<path d="${polyline(r.pts, r.closed)}" fill="none" stroke="#f3f1e7" stroke-width="66" stroke-linejoin="round" stroke-linecap="round"/>`);
+  for (const r of roadRuns) out.push(`<path d="${polyline(r.pts, r.closed)}" fill="none" stroke="#5c6177" stroke-width="54" stroke-linejoin="round" stroke-linecap="round"/>`);
+  for (const r of roadRuns) out.push(`<path d="${polyline(r.pts, r.closed)}" fill="none" stroke="#ffd23f" stroke-width="5" stroke-dasharray="22 20"/>`);
 
   // spaces on the road
   for (const rd of ROADS) {
@@ -163,7 +235,19 @@ export function staticSvg(): string {
   }
   const items = scenery().sort((a, b) => a[0] - b[0]);
   out.push(...items.map((i) => i[1]));
+  for (const [a, b] of FLIGHTS) out.push(flightPath(ROADS[a], ROADS[b]));
+  const STATES: [string, LonLat][] = [['WESTERN AUSTRALIA', [121.5, -25.5]], ['NORTHERN TERRITORY', [133.5, -19.5]], ['SOUTH AUSTRALIA', [134.5, -29.6]], ['QUEENSLAND', [144.5, -22.5]], ['NEW SOUTH WALES', [146.2, -30.9]], ['VICTORIA', [143.6, -37.0]], ['TASMANIA', [149.6, -43.0]], ['ACT', [149.3, -35.9]]];
+  for (const [name, at] of STATES) {
+    const [x, y] = lonLatToWorld(at);
+    out.push(`<text x="${r1(x)}" y="${r1(y)}" text-anchor="middle" class="state-name${name === 'ACT' ? ' state-name--small' : ''}">${name}</text>`);
+  }
+
   return out.join('\n');
+}
+
+/** City signs and state names, drawn above everything on the map. */
+export function labelSvg(): string {
+  return REGIONS.map((rg) => regionSign(rg.label.x, rg.label.y, rg.capital ? `★ ${rg.name}` : rg.name, rg.color)).join('');
 }
 
 // ------------------------------------------------------------------ dynamic layer
@@ -172,7 +256,7 @@ const SPECIAL_ART: Record<SpecialId, string> = { park: 'special-park', mall: 'sp
 const GOD_ART: Record<string, string> = { wealth: 'god-wealth', fortune: 'god-fortune', land: 'god-land', angel: 'god-angel', badLuck: 'god-badluck', poverty: 'god-poverty', devil: 'god-devil' };
 export const godArt = (id: string) => GOD_ART[id];
 
-export function dynamicSvg(s: GameState, colors: Record<string, string>): string {
+export function dynamicSvg(s: GameState, colors: Record<string, string>, hidePlot: number | null = null): string {
   const items: [number, string][] = [];
   for (const pl of PLOTS) {
     const ps = s.plots[pl.id];
@@ -184,6 +268,8 @@ export function dynamicSvg(s: GameState, colors: Record<string, string>): string
       : `<ellipse cx="${r1(x)}" cy="${r1(y)}" rx="70" ry="43" fill="#d6f0b4" opacity=".75" stroke="${region.color}" stroke-width="5" stroke-dasharray="14 10"/>`;
     if (!owner) {
       g += `<g transform="translate(${r1(x)},${r1(y - 4)})"><rect x="-4" y="-34" width="8" height="36" rx="3" fill="#8a5a33"/><rect x="-46" y="-72" width="92" height="42" rx="12" fill="#fff" stroke="${region.color}" stroke-width="5"/><text x="0" y="-42" text-anchor="middle" class="sign">$${PLOTS[pl.id].price}</text></g>`;
+    } else if (pl.id === hidePlot) {
+      // this building is going up right now; the map animates it
     } else if (ps.special) {
       g += sprite(SPECIAL_ART[ps.special], x, y, 190, 44);
     } else if (ps.level === 0) {
@@ -201,6 +287,20 @@ export function dynamicSvg(s: GameState, colors: Record<string, string>): string
   for (const [road] of Object.entries(s.bananas)) {
     const rd = ROADS[Number(road)];
     items.push([rd.y + 1, `<g transform="translate(${r1(rd.x + 24)},${r1(rd.y - 4)})"><path d="M-22 0 q22 22 44 -10 q-22 6 -44 10z" fill="#ffd23f" stroke="#a87900" stroke-width="3" stroke-linejoin="round"/><path d="M-22 0 l-8 -4" stroke="#6b4b00" stroke-width="4" stroke-linecap="round"/></g>`]);
+  }
+  for (const [road] of Object.entries(s.bombs)) {
+    const rd = ROADS[Number(road)];
+    items.push([rd.y + 1, `<g transform="translate(${r1(rd.x - 26)},${r1(rd.y - 10)})"><circle r="17" fill="#2b2d42" stroke="#fff" stroke-width="3"/><path d="M8 -14 q8 -10 16 -6" stroke="#8a5a33" stroke-width="4" fill="none"/><circle cx="25" cy="-20" r="5" fill="#ff8a1f"/><circle cx="-6" cy="-6" r="5" fill="#fff" opacity=".5"/></g>`]);
+  }
+  for (const [road, pk] of Object.entries(s.pickups)) {
+    const rd = ROADS[Number(road)];
+    const g =
+      pk.kind === 'cash'
+        ? `<path d="M-20 4 q-4 -26 12 -30 l-6 -8 h28 l-6 8 q16 4 12 30z" fill="#e0a800" stroke="#7a5200" stroke-width="3" stroke-linejoin="round"/><text x="0" y="-4" text-anchor="middle" class="pickup-mark">$</text>`
+        : pk.kind === 'points'
+          ? `<path d="M-18 -26 h36 l10 14 -28 28 -28 -28z" fill="#5ed3ff" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M-8 -26 l8 42 8 -42" stroke="#fff" stroke-width="2" fill="none" opacity=".8"/>`
+          : `<rect x="-22" y="-34" width="44" height="38" rx="5" fill="#b9783f" stroke="#5b3a1e" stroke-width="3"/><path d="M-22 -22 h44 M0 -34 v38" stroke="#5b3a1e" stroke-width="3"/><text x="0" y="-6" text-anchor="middle" class="pickup-mark">?</text>`;
+    items.push([rd.y + 2, `<g class="pickup" transform="translate(${r1(rd.x)},${r1(rd.y - 18)})"><ellipse cx="0" cy="22" rx="24" ry="8" fill="#000" opacity=".2"/>${g}</g>`]);
   }
   for (const [road, god] of Object.entries(s.mapGods)) {
     const rd = ROADS[Number(road)];

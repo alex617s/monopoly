@@ -15,9 +15,9 @@ import {
   NEWS,
   characterById,
 } from '../data/content';
-import { HOSPITAL_ROAD, JAIL_ROAD, PLOTS, REGIONS, ROADS, START_ROAD, plotsInRegion, roadsAhead } from '../data/map';
-import { RULES, SPECIALS } from '../data/rules';
-import type { Action, GameState, NewEvent, NewPlayer, Pending, PlayerState } from './types';
+import { FLIGHTS, HOSPITAL_ROAD, JAIL_ROAD, PLOTS, REGIONS, ROADS, START_ROAD, plotsInRegion, regionById, roadsAhead } from '../data/map';
+import { BUILDINGS, RULES, SPECIALS } from '../data/rules';
+import type { Action, GameState, NewEvent, NewPlayer, Pending, Pickup, PlayerState } from './types';
 
 export class RuleError extends Error {}
 
@@ -65,6 +65,8 @@ export function createGame(players: NewPlayer[], rng: Rng = Math.random): GameSt
     move: null,
     roadblocks: {},
     bananas: {},
+    bombs: {},
+    pickups: {},
     mapGods: {},
     priceUp: {},
     boomRegion: null,
@@ -78,6 +80,7 @@ export function createGame(players: NewPlayer[], rng: Rng = Math.random): GameSt
   };
   spawnGod(s, rng);
   spawnGod(s, rng);
+  for (let k = 0; k < 3; k++) spawnPickup(s, rng);
   startTurn(s, rng);
   return s;
 }
@@ -95,6 +98,13 @@ function log(s: GameState, text: string, tone: 'good' | 'bad' | 'info' = 'info')
   if (s.log.length > 40) s.log.splice(0, s.log.length - 40);
   emit(s, { type: 'toast', text, tone });
 }
+
+/** A big card on everyone's screen saying what just happened. */
+function notice(s: GameState, n: { player?: PlayerState | null; title: string; text: string; art?: string | null; tone?: 'good' | 'bad' | 'info'; days?: number | null }) {
+  emit(s, { type: 'notice', playerId: n.player?.id ?? null, title: n.title, text: n.text, art: n.art ?? null, tone: n.tone ?? 'info', days: n.days ?? null });
+}
+
+const GOD_ART: Record<GodId, string> = { wealth: 'god-wealth', fortune: 'god-fortune', land: 'god-land', angel: 'god-angel', badLuck: 'god-badluck', poverty: 'god-poverty', devil: 'god-devil' };
 
 export const cur = (s: GameState) => s.players[s.current];
 const byId = (s: GameState, id: string) => s.players.find((p) => p.id === id)!;
@@ -141,6 +151,7 @@ function sendTo(s: GameState, p: PlayerState, place: 'hospital' | 'jail', turns:
   emit(s, { type: 'jump', playerId: p.id, to: p.pos });
   say(s, p, 'ouch', rng);
   log(s, `${p.name} goes to ${place === 'hospital' ? 'Hospital' : 'Jail'} for ${turns} turn${turns > 1 ? 's' : ''}.`, 'bad');
+  notice(s, { player: p, title: place === 'hospital' ? 'Off to Hospital!' : 'Off to Jail!', text: `${p.name} must stay ${turns} turn${turns > 1 ? 's' : ''}, or pay to leave early.`, tone: 'bad' });
   if (s.move && cur(s).id === p.id) s.move.left = 0;
 }
 
@@ -201,6 +212,7 @@ function bankrupt(s: GameState, p: PlayerState, rng: Rng) {
     p.cash = RULES.rescueCash;
     say(s, p, 'ouch', rng);
     log(s, `${p.name} ran out of money! The bank rescues them with $${RULES.rescueCash}. Next time they are out.`, 'bad');
+    notice(s, { player: p, title: 'Rescued by the bank!', text: `${p.name} ran out of money. The bank gives $${RULES.rescueCash} but takes all the land. Next time it is game over!`, tone: 'bad' });
     return;
   }
   p.out = true;
@@ -208,6 +220,7 @@ function bankrupt(s: GameState, p: PlayerState, rng: Rng) {
   p.vehicle = null;
   p.balloon = null;
   log(s, `${p.name} ran out of money again and is out of the game.`, 'bad');
+  notice(s, { player: p, title: `${p.name} is out!`, text: 'They ran out of money a second time.', tone: 'bad' });
   if (alive(s).length <= 1) finish(s);
 }
 
@@ -218,16 +231,46 @@ function attachGod(s: GameState, p: PlayerState, id: GodId, rng: Rng) {
   p.godShield = id === 'fortune';
   emit(s, { type: 'god', playerId: p.id, god: id, joined: true });
   log(s, `${g.name} joins ${p.name}!`, g.good ? 'good' : 'bad');
+  notice(s, { player: p, title: `${g.name} joins ${p.name}!`, text: g.desc, art: GOD_ART[id], tone: g.good ? 'good' : 'bad', days: RULES.godDays });
   if (id === 'wealth') gain(s, p, 200);
   if (id === 'fortune' && p.cards.length < RULES.maxCards) p.cards.push(pickOne(rng, CARD_IDS));
 }
 
 function spawnGod(s: GameState, rng: Rng) {
   const taken = new Set(s.players.map((p) => p.pos));
-  const free = ROADS.filter((r) => r.id !== START_ROAD && !s.mapGods[r.id] && !taken.has(r.id) && !r.disc);
+  const free = ROADS.filter((r) => r.id !== START_ROAD && !s.mapGods[r.id] && !s.pickups[r.id] && !taken.has(r.id) && !r.disc);
   if (!free.length) return;
   const road = pickOne(rng, free);
   s.mapGods[road.id] = { id: pickOne(rng, GOD_IDS), days: RULES.mapGodDays };
+}
+
+function spawnPickup(s: GameState, rng: Rng) {
+  if (Object.keys(s.pickups).length >= 6) return;
+  const taken = new Set(s.players.map((p) => p.pos));
+  const free = ROADS.filter((r) => r.id !== START_ROAD && !s.mapGods[r.id] && !s.pickups[r.id] && !taken.has(r.id));
+  if (!free.length) return;
+  const t = rng();
+  const pick: Pickup = t < 0.45 ? { kind: 'cash', amount: 50 + Math.floor(rng() * 4) * 50 } : t < 0.8 ? { kind: 'points', amount: 10 + Math.floor(rng() * 3) * 10 } : { kind: 'crate', amount: 0 };
+  s.pickups[pickOne(rng, free).id] = pick;
+}
+
+function collectPickup(s: GameState, p: PlayerState, road: number, rng: Rng) {
+  const pk = s.pickups[road];
+  delete s.pickups[road];
+  if (pk.kind === 'cash') {
+    gain(s, p, pk.amount);
+    notice(s, { player: p, title: 'A bag of money!', text: `${p.name} found $${pk.amount} on the road.`, tone: 'good' });
+  } else if (pk.kind === 'points') {
+    p.points += pk.amount;
+    notice(s, { player: p, title: 'Points bag!', text: `${p.name} found ${pk.amount} points.`, tone: 'good' });
+  } else if (p.items.length < RULES.maxItems) {
+    const it = pickOne(rng, ITEM_IDS.filter((i) => i !== 'scooter' && i !== 'car'));
+    p.items.push(it);
+    notice(s, { player: p, title: 'Mystery box!', text: `Inside is a ${ITEMS[it].name}. ${ITEMS[it].desc}`, tone: 'good' });
+  } else {
+    p.points += 20;
+    notice(s, { player: p, title: 'Mystery box!', text: `${p.name}'s bag is full, so it turns into 20 points.`, tone: 'good' });
+  }
 }
 
 export function tollFor(s: GameState, plot: number, payer: PlayerState | null): number {
@@ -318,24 +361,30 @@ function newDay(s: GameState, rng: Rng) {
       if (p.god.days <= 0) {
         emit(s, { type: 'god', playerId: p.id, god: p.god.id, joined: false });
         log(s, `${GODS[p.god.id].name} leaves ${p.name}.`);
+        notice(s, { player: p, title: `${GODS[p.god.id].name} leaves`, text: `${p.name}'s ${GODS[p.god.id].good ? 'good luck ends. Bye bye!' : 'bad luck is over. Phew!'}`, art: GOD_ART[p.god.id], tone: 'info' });
         p.god = null;
         p.godShield = false;
       }
     }
     if (p.vehicle && --p.vehicle.days <= 0) {
       log(s, `${p.name}'s ${p.vehicle.kind} broke down. Time to walk!`, 'bad');
+      notice(s, { player: p, title: `The ${p.vehicle.kind} broke down!`, text: `${p.name} is back to spinning one wheel.`, tone: 'bad' });
       p.vehicle = null;
     }
     if (p.teamUp && --p.teamUp.days <= 0) p.teamUp = null;
     if (p.balloon !== null && --p.balloon <= 0) {
       p.balloon = null;
       log(s, `SPLASH! The water balloon burst on ${p.name}!`, 'bad');
+      notice(s, { player: p, title: 'SPLASH!', text: `The water balloon burst on ${p.name}!`, tone: 'bad' });
       sendTo(s, p, 'hospital', 2, rng);
     }
   }
   for (const [k, v] of Object.entries(s.priceUp)) if (--v.days <= 0) delete s.priceUp[k];
   for (const [k, g] of Object.entries(s.mapGods)) if (--g.days <= 0) delete s.mapGods[+k];
   spawnGod(s, rng);
+  if (Object.keys(s.mapGods).length < 4) spawnGod(s, rng);
+  spawnPickup(s, rng);
+  spawnPickup(s, rng);
 }
 
 function applyNews(s: GameState, news: (typeof NEWS)[number], rng: Rng) {
@@ -358,6 +407,17 @@ function applyNews(s: GameState, news: (typeof NEWS)[number], rng: Rng) {
       const north = new Set(['reef', 'darwin', 'goldcoast']);
       const hit = s.plots.map((ps, i) => ({ ps, i })).filter(({ ps, i }) => ps.level > 0 && !ps.special && north.has(PLOTS[i].region));
       for (let k = 0; k < 3 && hit.length; k++) hit.splice(Math.floor(rng() * hit.length), 1)[0].ps.level -= 1;
+      break;
+    }
+    case 'quake': {
+      const built = s.plots.map((ps, i) => ({ ps, i })).filter(({ ps }) => ps.level > 0 && !ps.special);
+      if (!built.length) {
+        text = 'Luckily, nobody has built anything yet!';
+        break;
+      }
+      const region = PLOTS[pickOne(rng, built).i].region;
+      built.filter(({ i }) => PLOTS[i].region === region).forEach(({ ps }) => (ps.level -= 1));
+      text = `Buildings in ${titleCase(regionById(region).name)} shake and lose a level.`;
       break;
     }
     case 'topLandowner': {
@@ -459,11 +519,24 @@ function stepTo(s: GameState, to: number, rng: Rng): 'ok' | 'pause' | 'stop' {
   if (s.bananas[to] !== undefined) {
     delete s.bananas[to];
     log(s, `${p.name} slipped on a banana!`, 'bad');
+    notice(s, { player: p, title: 'Slipped on a banana!', text: `Someone left a Banana Trap here. ${p.name} slips over.`, tone: 'bad' });
     if (!protect(s, p, 'the banana')) {
       sendTo(s, p, 'hospital', 2, rng);
       return 'stop';
     }
   }
+
+  if (s.bombs[to] !== undefined) {
+    delete s.bombs[to];
+    log(s, `BOOM! ${p.name} stepped on a bomb!`, 'bad');
+    notice(s, { player: p, title: 'BOOM!', text: `${p.name} stepped on a hidden bomb!`, tone: 'bad' });
+    if (!protect(s, p, 'the bomb')) {
+      sendTo(s, p, 'hospital', 3, rng);
+      return 'stop';
+    }
+  }
+
+  if (s.pickups[to]) collectPickup(s, p, to, rng);
 
   // Walking past other players hands on bad gods and water balloons.
   const others = alive(s).filter((o) => o.id !== p.id && o.pos === to);
@@ -477,11 +550,13 @@ function stepTo(s: GameState, to: number, rng: Rng): 'ok' | 'pause' | 'stop' {
         emit(s, { type: 'god', playerId: o.id, god: g.id, joined: true });
       }
       log(s, `${p.name} passed the ${GODS[g.id].name} to ${o.name}! Ha ha!`, 'info');
+      notice(s, { player: o, title: `${o.name} got the ${GODS[g.id].name}!`, text: `${p.name} walked past and passed it on. Ha ha!`, art: GOD_ART[g.id], tone: 'bad', days: g.days });
     }
     if (p.balloon !== null && o.balloon === null) {
       o.balloon = p.balloon;
       p.balloon = null;
       log(s, `${p.name} passed the water balloon to ${o.name}!`, 'info');
+      notice(s, { player: o, title: 'Catch!', text: `${p.name} passed the water balloon to ${o.name}. It bursts in ${o.balloon} day${o.balloon === 1 ? '' : 's'}!`, tone: 'bad', days: o.balloon });
     }
   }
 
@@ -497,24 +572,20 @@ function stepTo(s: GameState, to: number, rng: Rng): 'ok' | 'pause' | 'stop' {
     if (p.god?.id === 'land' && !ps.owner) {
       ps.owner = p.id;
       log(s, `The Land God gave ${p.name} ${info.name}!`, 'good');
+      notice(s, { player: p, title: 'A free place!', text: `The Land God gave ${p.name} ${info.name}.`, art: GOD_ART.land, tone: 'good' });
     } else if (p.god?.id === 'angel' && ps.owner && !ps.special && ps.level < RULES.maxLevel) {
       ps.level += 1;
       log(s, `The Angel built on ${info.name}!`, 'good');
+      emit(s, { type: 'build', playerId: ps.owner, plot: road.plot, level: ps.level });
     } else if (p.god?.id === 'devil' && ps.level > 0 && !ps.special) {
       ps.level -= 1;
       log(s, `The Devil knocked a level off ${info.name}!`, 'bad');
+      notice(s, { player: p, title: 'The Devil strikes!', text: `${info.name} lost a level.`, art: GOD_ART.devil, tone: 'bad' });
     }
-    // Passing your own land builds automatically while you can spare the money.
-    if (passing && ps.owner === p.id && !ps.special && ps.level < RULES.maxLevel) {
-      const levels = Math.min(RULES.passBuildLevels + (p.god?.id === 'fortune' ? 1 : 0), RULES.maxLevel - ps.level);
-      const cost = buildCost(road.plot) * levels;
-      if (p.cash - cost >= 200) {
-        p.cash -= cost;
-        ps.level += levels;
-        p.points += RULES.buildPoints;
-        emit(s, { type: 'money', playerId: p.id, amount: -cost });
-        log(s, `${p.name} built on ${info.name} while passing.`, 'good');
-      }
+    // Passing your own land: you may pay to build one level.
+    if (passing && ps.owner === p.id && !ps.special && ps.level < RULES.maxLevel && p.cash >= buildCost(road.plot)) {
+      s.pending = { kind: 'build', plot: road.plot, step: 1, left: 1, passing: true };
+      return 'pause';
     }
   }
 
@@ -548,6 +619,7 @@ function land(s: GameState, rng: Rng) {
         const c = pickOne(rng, CARD_IDS);
         p.cards.push(c);
         log(s, `${p.name} got a ${CARDS[c].name} card!`, 'good');
+        notice(s, { player: p, title: `New card: ${CARDS[c].name}`, text: CARDS[c].desc, tone: 'good' });
       } else log(s, `${p.name}'s hand of cards is full.`);
       break;
     case 'chance':
@@ -588,6 +660,17 @@ function land(s: GameState, rng: Rng) {
     case 'park':
       log(s, `${p.name} has a rest in the park.`);
       break;
+    case 'ferry':
+      p.points += 10;
+      log(s, `${p.name} enjoys the ferry ride: +10 points.`, 'good');
+      break;
+    case 'airport': {
+      const pair = FLIGHTS.find((f) => f.includes(p.pos))!;
+      const to = pair[0] === p.pos ? pair[1] : pair[0];
+      if (p.cash >= RULES.flightFee) s.pending = { kind: 'flight', to, fee: RULES.flightFee };
+      else log(s, `${p.name} can't afford a plane ticket.`);
+      break;
+    }
     default:
       break;
   }
@@ -602,11 +685,8 @@ function landOnPlot(s: GameState, p: PlayerState, plot: number, rng: Rng) {
     return;
   }
   if (ps.owner === p.id) {
-    if (ps.special || ps.level >= RULES.maxLevel) return;
-    const want = Math.min(RULES.stopBuildLevels + (p.god?.id === 'fortune' ? 1 : 0), RULES.maxLevel - ps.level);
-    const afford = Math.floor(p.cash / buildCost(plot));
-    const max = Math.min(want, afford);
-    if (max > 0) s.pending = { kind: 'build', plot, max };
+    if (ps.special || ps.level >= RULES.maxLevel || p.cash < buildCost(plot)) return;
+    s.pending = { kind: 'build', plot, step: 1, left: RULES.stopBuildLevels, passing: false };
     return;
   }
   const owner = byId(s, ps.owner);
@@ -753,6 +833,15 @@ function useCard(s: GameState, a: Extract<Action, { type: 'useCard' }>, rng: Rng
       log(s, `${p.name} turned ${PLOTS[a.plot!].name} into a ${SPECIALS[a.special].name}!`, 'good');
       break;
     }
+    case 'steal': {
+      const t = target!;
+      if (!t.cards.length) throw new RuleError(`${t.name} has no cards.`);
+      const k = Math.floor(rng() * t.cards.length);
+      const c = t.cards.splice(k, 1)[0];
+      if (p.cards.length < RULES.maxCards) p.cards.push(c);
+      notice(s, { player: t, title: 'Card stolen!', text: `${p.name} took ${t.name}'s ${CARDS[c].name} card.`, tone: 'bad' });
+      break;
+    }
     case 'godCall':
       if (p.god) {
         emit(s, { type: 'god', playerId: p.id, god: p.god.id, joined: false });
@@ -764,8 +853,9 @@ function useCard(s: GameState, a: Extract<Action, { type: 'useCard' }>, rng: Rng
       }
       break;
   }
-  p.cards.splice(a.index, 1);
+  p.cards.splice(p.cards.indexOf(id), 1);
   p.usedCard = true;
+  if (target && CARDS[id].mean && id !== 'steal') notice(s, { player: target, title: `${CARDS[id].name}!`, text: `${p.name} used it on ${target.name}. ${CARDS[id].desc}`, tone: 'bad' });
   log(s, `${p.name} used ${CARDS[id].name}${target ? ` on ${target.name}` : ''}.`, CARDS[id].mean ? 'bad' : 'good');
 }
 
@@ -783,22 +873,43 @@ function useItem(s: GameState, a: Extract<Action, { type: 'useItem' }>, rng: Rng
       break;
     }
     case 'roadblock':
-    case 'banana': {
+    case 'banana':
+    case 'bomb': {
       const d = a.distance ?? 0;
       if (!(d >= 1 && d <= 6)) throw new RuleError('Pick 1 to 6 spaces ahead.');
       const road = roadsAhead(p.pos, p.dir, d)[d - 1];
       if (id === 'roadblock') s.roadblocks[road] = p.id;
-      else s.bananas[road] = p.id;
+      else if (id === 'banana') s.bananas[road] = p.id;
+      else s.bombs[road] = p.id;
+      break;
+    }
+    case 'monsterTruck': {
+      let knocked = 0;
+      roadsAhead(p.pos, p.dir, 10).forEach((r) => {
+        delete s.roadblocks[r];
+        delete s.bananas[r];
+        delete s.bombs[r];
+        const pl = ROADS[r].plot;
+        if (pl === undefined) return;
+        const ps = s.plots[pl];
+        if (ps.owner && ps.owner !== p.id && ps.level > 0 && !ps.special) {
+          ps.level -= 1;
+          knocked++;
+        }
+      });
+      notice(s, { player: p, title: 'Monster Truck!', text: `It clears the road ahead${knocked ? ` and knocks ${knocked} building${knocked > 1 ? 's' : ''} down a level` : ''}. VROOM!`, tone: 'bad' });
       break;
     }
     case 'waterBalloon':
       if (!target) throw new RuleError('Pick a player.');
       if (target.balloon === null) target.balloon = RULES.waterBalloonDays;
+      notice(s, { player: target, title: 'Water Balloon!', text: `${p.name} gave ${target.name} a water balloon. It bursts in ${RULES.waterBalloonDays} days, unless ${target.name} walks past someone and passes it on!`, tone: 'bad', days: RULES.waterBalloonDays });
       break;
     case 'robot':
       roadsAhead(p.pos, p.dir, 10).forEach((r) => {
         delete s.roadblocks[r];
         delete s.bananas[r];
+        delete s.bombs[r];
       });
       break;
     case 'rocket': {
@@ -810,6 +921,7 @@ function useItem(s: GameState, a: Extract<Action, { type: 'useItem' }>, rng: Rng
         ps.level = 4;
       }
       log(s, `BOOM! A firework hit ${PLOTS[a.plot].name}!`, 'bad');
+      notice(s, { player: ps.owner ? byId(s, ps.owner) : null, title: 'Firework Rocket!', text: `${p.name}'s rocket hit ${PLOTS[a.plot].name}. It loses a level!`, tone: 'bad' });
       alive(s)
         .filter((x) => x.pos === PLOTS[a.plot!].road)
         .forEach((x) => sendTo(s, x, 'hospital', 1, rng));
@@ -818,9 +930,10 @@ function useItem(s: GameState, a: Extract<Action, { type: 'useItem' }>, rng: Rng
     case 'scooter':
     case 'car':
       p.vehicle = { kind: id, days: RULES.vehicleDays };
+      notice(s, { player: p, title: `${p.name} rides a ${ITEMS[id].name}!`, text: `Spin ${id === 'car' ? 3 : 2} wheels every turn for ${RULES.vehicleDays} days.`, tone: 'good', days: RULES.vehicleDays });
       break;
   }
-  p.items.splice(a.index, 1);
+  p.items.splice(p.items.indexOf(id), 1);
   p.usedItem = true;
   log(s, `${p.name} used ${ITEMS[id].name}${target ? ` on ${target.name}` : ''}.`, ITEMS[id].mean ? 'bad' : 'good');
 }
@@ -843,6 +956,7 @@ function shopBuy(s: GameState, shop: 'card' | 'item', id: string) {
     if (id === 'scooter' || id === 'car') {
       p.vehicle = { kind: id, days: RULES.vehicleDays };
       log(s, `${p.name} bought a ${it.name}! Zoom!`, 'good');
+      notice(s, { player: p, title: `${p.name} rides a ${it.name}!`, text: `Spin ${id === 'car' ? 3 : 2} wheels every turn for ${RULES.vehicleDays} days.`, tone: 'good', days: RULES.vehicleDays });
       return;
     }
     if (p.items.length >= RULES.maxItems) throw new RuleError('Your bag is full.');
@@ -951,16 +1065,38 @@ export function reduce(state: GameState, action: Action, rng: Rng = Math.random)
     }
     case 'build': {
       if (pend.kind !== 'build') throw new RuleError('Nothing to build.');
-      const n = Math.max(0, Math.min(pend.max, Math.trunc(action.levels)));
-      if (n > 0) {
-        const cost = buildCost(pend.plot) * n;
+      const ps = s.plots[pend.plot];
+      const cost = buildCost(pend.plot);
+      let again = false;
+      if (action.levels > 0) {
         if (p.cash < cost) throw new RuleError('Not enough cash.');
         p.cash -= cost;
         emit(s, { type: 'money', playerId: p.id, amount: -cost });
-        s.plots[pend.plot].level += n;
+        // the God of Fortune adds a free extra level
+        ps.level = Math.min(RULES.maxLevel, ps.level + 1 + (p.god?.id === 'fortune' ? 1 : 0));
         p.points += RULES.buildPoints;
+        emit(s, { type: 'build', playerId: p.id, plot: pend.plot, level: ps.level });
         say(s, p, 'build', rng);
-        log(s, `${p.name} built up ${PLOTS[pend.plot].name} to a ${['', 'Tent', 'Cabin', 'Holiday House', 'Hotel', 'Skyscraper'][s.plots[pend.plot].level]}!`, 'good');
+        log(s, `${p.name} built up ${PLOTS[pend.plot].name} to a ${BUILDINGS[ps.level]}!`, 'good');
+        again = pend.left > 1 && ps.level < RULES.maxLevel && p.cash >= cost;
+      }
+      if (again) {
+        s.pending = { ...pend, step: pend.step + 1, left: pend.left - 1 };
+        return s;
+      }
+      s.pending = null;
+      if (pend.passing) continueMove(s, rng);
+      else endTurn(s, rng);
+      return s;
+    }
+    case 'fly': {
+      if (pend.kind !== 'flight') throw new RuleError('You are not at the airport.');
+      if (action.yes && p.cash >= pend.fee) {
+        p.cash -= pend.fee;
+        emit(s, { type: 'money', playerId: p.id, amount: -pend.fee });
+        p.pos = pend.to;
+        emit(s, { type: 'jump', playerId: p.id, to: pend.to });
+        log(s, `${p.name} flew across Australia!`, 'good');
       }
       endTurn(s, rng);
       return s;

@@ -12,7 +12,8 @@ export type CardId =
   | 'sleep'
   | 'boomerang'
   | 'rebuild'
-  | 'godCall';
+  | 'godCall'
+  | 'steal';
 
 export type Target = 'none' | 'player' | 'myPlot' | 'swap' | 'myRegion' | 'rebuild';
 
@@ -38,10 +39,11 @@ export const CARDS: Record<CardId, CardDef> = {
   boomerang: { name: 'Boomerang', desc: 'Turn around and go the other way.', price: 20, mean: false, target: 'none', color: '#c85a14' },
   rebuild: { name: 'Rebuild Card', desc: 'Turn one of your level 3+ buildings into a park, mall, petrol station or theme park.', price: 15, mean: false, target: 'rebuild', color: '#7b4fc0' },
   godCall: { name: 'God Call', desc: 'Send away the god with you, or call a good god.', price: 30, mean: false, target: 'none', color: '#e0457b' },
+  steal: { name: 'Steal Card', desc: 'Take a random card from a player.', price: 30, mean: true, target: 'player', color: '#3b3f58' },
 };
 export const CARD_IDS = Object.keys(CARDS) as CardId[];
 
-export type ItemId = 'remoteDice' | 'roadblock' | 'banana' | 'waterBalloon' | 'robot' | 'rocket' | 'scooter' | 'car';
+export type ItemId = 'remoteDice' | 'roadblock' | 'banana' | 'bomb' | 'waterBalloon' | 'robot' | 'monsterTruck' | 'rocket' | 'scooter' | 'car';
 export type ItemTarget = 'none' | 'distance' | 'player' | 'anyPlot' | 'value';
 
 export interface ItemDef {
@@ -57,8 +59,10 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   remoteDice: { name: 'Remote Dice', desc: 'Choose where the wheel stops (1–6).', price: 30, mean: false, target: 'value', color: '#22a45d' },
   roadblock: { name: 'Roadblock', desc: 'Put a roadblock 1–6 spaces ahead. Whoever reaches it must stop.', price: 30, mean: true, target: 'distance', color: '#f08a1c' },
   banana: { name: 'Banana Trap', desc: 'Drop a banana 1–6 spaces ahead. Whoever steps on it slips to Hospital for 2 turns.', price: 25, mean: true, target: 'distance', color: '#e0a800' },
+  bomb: { name: 'Bomb', desc: 'Hide a bomb 1–6 spaces ahead. Whoever steps there goes to Hospital for 3 turns.', price: 35, mean: true, target: 'distance', color: '#2b2d42' },
   waterBalloon: { name: 'Water Balloon', desc: 'Give it to a player. It bursts after 5 days and sends its holder to Hospital. Pass it on by walking past someone!', price: 25, mean: true, target: 'player', color: '#3a86ff' },
   robot: { name: 'Robot Helper', desc: 'Clears roadblocks and bananas 10 spaces ahead.', price: 15, mean: false, target: 'none', color: '#566079' },
+  monsterTruck: { name: 'Monster Truck', desc: 'Drives 10 spaces ahead: clears every trap and knocks 1 level off other players’ buildings by the road.', price: 60, mean: true, target: 'none', color: '#7a4b25' },
   rocket: { name: 'Firework Rocket', desc: 'Knocks 1 level off any building. Anyone standing there goes to Hospital for 1 turn.', price: 100, mean: true, target: 'anyPlot', color: '#d6342c' },
   scooter: { name: 'Scooter', desc: 'Spin 2 wheels for 10 days.', price: 80, mean: false, target: 'none', color: '#1b9aaa' },
   car: { name: 'Car', desc: 'Spin 3 wheels for 10 days.', price: 150, mean: false, target: 'none', color: '#d6342c' },
@@ -106,6 +110,7 @@ export type NewsEffect =
   | { kind: 'petrol'; amount: number }
   | { kind: 'boom' }
   | { kind: 'cyclone' }
+  | { kind: 'quake' }
   | { kind: 'topLandowner'; amount: number }
   | { kind: 'luckyDraw'; amount: number }
   | { kind: 'bankBonus' }
@@ -116,6 +121,7 @@ export const NEWS: { headline: string; text: string; effect: NewsEffect }[] = [
   { headline: 'Petrol prices go up!', text: 'Everyone with a scooter or car pays $30.', effect: { kind: 'petrol', amount: 30 } },
   { headline: 'Tourist boom!', text: 'Tolls in one region are 50% higher today.', effect: { kind: 'boom' } },
   { headline: 'Cyclone in the north!', text: 'Three buildings up north lose a level.', effect: { kind: 'cyclone' } },
+  { headline: 'Earthquake!', text: 'Buildings in one region shake and lose a level.', effect: { kind: 'quake' } },
   { headline: 'Top landowner award!', text: 'The player with the most places gets $200.', effect: { kind: 'topLandowner', amount: 200 } },
   { headline: 'Lucky draw!', text: 'The player with the least cash gets $100.', effect: { kind: 'luckyDraw', amount: 100 } },
   { headline: 'Bank pays a bonus!', text: 'Savings interest is doubled today.', effect: { kind: 'bankBonus' } },

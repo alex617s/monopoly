@@ -7,7 +7,7 @@ import { totalAssets } from '../game/engine';
 import type { Action, GameState } from '../game/types';
 import { Avatar, Icon, Modal, money } from './common';
 import { OverlayView, Podium } from './overlays';
-import { BankPanel, BuildPanel, BuyPanel, HowToPlay, PlayerDetail, PlotDetail, ReleasePanel, Shop, UseDrawer } from './panels';
+import { BankPanel, BuildPanel, BuyPanel, FlightPanel, HowToPlay, PlayerDetail, PlotDetail, ReleasePanel, Shop, UseDrawer } from './panels';
 import { useEventPlayer } from './useEventPlayer';
 
 export interface EmoteBubble {
@@ -85,7 +85,8 @@ export function GameScreen({ state, myIds, dispatch, isHost, deadline, onExit, e
   let panel: ReactNode = null;
   if (myTurnReady && pend) {
     if (pend.kind === 'buy') panel = <BuyPanel state={state} plot={pend.plot} dispatch={dispatch} />;
-    else if (pend.kind === 'build') panel = <BuildPanel state={state} plot={pend.plot} max={pend.max} dispatch={dispatch} />;
+    else if (pend.kind === 'build') panel = <BuildPanel key={`${pend.plot}-${pend.step}`} state={state} plot={pend.plot} step={pend.step} passing={pend.passing} dispatch={dispatch} />;
+    else if (pend.kind === 'flight') panel = <FlightPanel to={pend.to} fee={pend.fee} dispatch={dispatch} />;
     else if (pend.kind === 'release') panel = <ReleasePanel state={state} fee={pend.fee} place={pend.place} dispatch={dispatch} />;
     else if (pend.kind === 'fork')
       panel = (

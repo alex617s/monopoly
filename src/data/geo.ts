@@ -1,29 +1,19 @@
-// The shape of Australia and the route of the road, in longitude / latitude.
-// Everything is drawn on a gently tilted view of the country. The east coast
-// is magnified a little (most places to visit are there), so the spaces on the
-// road keep a comfortable distance from each other.
+// The shape of Australia and the routes of the roads, in longitude / latitude.
+// Everything keeps its real size and place, drawn on a gently tilted view.
 
 export type LonLat = [number, number];
 export type Pt = [number, number];
 
-const K = 80; // pixels per degree
-const TILT = 0.66; // squash north–south to tilt the map away from the viewer
-const WARP = { lon: 148, lat: -27, amount: 0.9, radius: 13 };
+const K = 105; // pixels per degree of latitude
+const COS_LAT = 0.89; // a degree of longitude is shorter this far south
+const TILT = 0.88; // squash north–south a little to tilt the map away from the viewer
 
 const LON0 = 108.5;
 const LAT0 = 5.5;
 
-function warp([lon, lat]: LonLat): LonLat {
-  const dx = lon - WARP.lon;
-  const dy = lat - WARP.lat;
-  const s = 1 + WARP.amount * Math.exp(-((dx * dx + dy * dy) / (WARP.radius * WARP.radius)));
-  return [WARP.lon + dx * s, WARP.lat + dy * s];
-}
-
 /** Flat map position before the tilt, used for distances along the road. */
-export function plane(p: LonLat): Pt {
-  const [lon, lat] = warp(p);
-  return [(lon - LON0) * K, (-lat - LAT0) * K];
+export function plane([lon, lat]: LonLat): Pt {
+  return [(lon - LON0) * K * COS_LAT, (-lat - LAT0) * K];
 }
 
 export const PAD_TOP = 120;
@@ -43,23 +33,6 @@ export const MAINLAND: LonLat[] = [
   [136.0, -13.3], [135.9, -15.0], [137.5, -16.2], [139.2, -17.4], [140.8, -17.4], [141.5, -15.0], [141.6, -12.6],
 ];
 export const TASMANIA: LonLat[] = [[144.7, -40.7], [146.5, -41.1], [148.3, -40.9], [148.3, -42.2], [147.6, -43.2], [146.0, -43.5], [145.2, -42.3]];
-
-/**
- * The outer road, from START near Sydney, north up the east coast, across
- * the top, down the west and back along the south. A number pins that
- * space of the outer loop to the point; spaces between pins are spread evenly.
- */
-export const LOOP: [number, number, number | null][] = [
-  [150.5, -34.8, 0], [151.3, -33.6, null], [152.2, -31.6, null], [153.1, -28.2, 5], [152.6, -26.0, null], [150.8, -23.6, null],
-  [148.6, -21.0, null], [146.6, -19.2, null], [145.6, -17.3, 13], [143.0, -18.6, null], [139.8, -18.2, null], [136.4, -15.6, null],
-  [133.4, -13.6, null], [131.0, -13.0, 18], [128.4, -16.0, null], [124.8, -18.2, null], [121.0, -20.6, null], [117.6, -22.2, null],
-  [115.4, -25.4, null], [115.4, -28.6, null], [116.0, -31.8, 23], [118.4, -33.4, null], [122.0, -32.8, null], [126.0, -32.0, null],
-  [130.0, -31.4, null], [134.0, -32.2, null], [136.8, -33.6, null], [138.7, -34.8, 28], [141.0, -36.6, null], [143.4, -37.7, null],
-  [145.2, -37.9, 31], [147.6, -37.2, null], [149.4, -36.2, null],
-];
-
-/** Middle of the Uluru shortcut; it starts at the fork and ends at the merge. */
-export const SHORTCUT_VIA: LonLat[] = [[148.4, -26.6], [142.6, -25.6], [137.4, -24.6], [133.4, -24.4], [130.6, -26.2], [128.0, -29.4]];
 
 // ------------------------------------------------------------------ curves
 
@@ -137,8 +110,8 @@ export const TASMANIA_PLANE = TASMANIA.map(plane);
 
 const all = [...MAINLAND_PLANE, ...TASMANIA_PLANE].map(tilt);
 const MARGIN = 420;
-const minX = Math.min(...all.map((p) => p[0])) - MARGIN;
-const maxX = Math.max(...all.map((p) => p[0])) + MARGIN;
+const minX = Math.min(...all.map((p) => p[0])) - MARGIN * 2;
+const maxX = Math.max(...all.map((p) => p[0])) + MARGIN * 2;
 const minY = Math.min(...all.map((p) => p[1])) - MARGIN;
 const maxY = Math.max(...all.map((p) => p[1])) + MARGIN;
 /** Shift so the world picture starts at 0,0. */
@@ -150,4 +123,6 @@ export const toWorld = (p: Pt): Pt => {
   const [x, y] = tilt(p);
   return [Math.round((x + OFFSET[0]) * 10) / 10, Math.round((y + OFFSET[1]) * 10) / 10];
 };
+/** Back from the world picture to the flat map. */
+export const fromWorld = ([x, y]: Pt): Pt => [x - OFFSET[0], (y - OFFSET[1] - PAD_TOP) / TILT];
 export const lonLatToWorld = (p: LonLat): Pt => toWorld(plane(p));

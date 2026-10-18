@@ -1,11 +1,11 @@
 import { MAINLAND_PLANE, Pt, TASMANIA_PLANE, WORLD_H, WORLD_W, smoothPath, toWorld } from '../data/geo';
-import { OUTER_CURVE, PLOTS, ROADS, SHORT_CURVE } from '../data/map';
+import { PLOTS, ROADS, ROAD_CURVES } from '../data/map';
 import type { GameState } from '../game/types';
 import type { Display } from '../ui/useEventPlayer';
 
 const LAND = [MAINLAND_PLANE, TASMANIA_PLANE].map((pts) => smoothPath(pts.map(toWorld), true, 1));
 const line = (pts: Pt[], closed: boolean) => 'M' + pts.filter((_, i) => i % 4 === 0).map((p) => `${p[0].toFixed(0)} ${p[1].toFixed(0)}`).join(' L') + (closed ? 'Z' : '');
-const ROAD_D = [line(OUTER_CURVE, true), line(SHORT_CURVE, false)];
+const ROAD_D = ROAD_CURVES.map((c) => line(c.pts, c.closed));
 
 /** A small overview: the road, owned places and every player. */
 export function MiniMap({ state, display, onOpen }: { state: GameState; display: Display; onOpen: () => void }) {

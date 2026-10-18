@@ -21,6 +21,7 @@ export const RULES = {
   interestRate: 0.02,
   hospitalFee: 50,
   bailFee: 100,
+  flightFee: 100,
   rescueCash: 500,
   rescues: 1,
   sellRate: 0.5,
