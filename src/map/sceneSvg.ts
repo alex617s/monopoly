@@ -262,6 +262,20 @@ export function staticSvg(): string {
   }
   const items = scenery().sort((a, b) => a[0] - b[0]);
   out.push(...items.map((i) => i[1]));
+  // boats and whales out at sea
+  const SEA: [string, LonLat, number][] = [
+    ['prop-boat', [156.2, -31.0], 120],
+    ['prop-boat', [111.6, -27.0], 110],
+    ['prop-boat', [126.4, -13.0], 100],
+    ['prop-boat', [141.6, -40.6], 100],
+    ['prop-whale', [157.0, -36.5], 150],
+    ['prop-whale', [112.0, -35.2], 140],
+    ['prop-whale', [131.0, -35.6], 130],
+  ];
+  for (const [name, at, w] of SEA) {
+    const [x, y] = lonLatToWorld(at);
+    out.push(sprite(name, x, y, w, w * 0.1));
+  }
   for (const [a, b] of FLIGHTS) out.push(flightPath(ROADS[a], ROADS[b]));
   const STATES: [string, LonLat][] = [['WESTERN AUSTRALIA', [121.5, -25.5]], ['NORTHERN TERRITORY', [133.5, -19.5]], ['SOUTH AUSTRALIA', [134.5, -29.6]], ['QUEENSLAND', [144.5, -22.5]], ['NEW SOUTH WALES', [146.2, -30.9]], ['VICTORIA', [143.6, -37.0]], ['TASMANIA', [150.6, -43.6]], ['ACT', [149.3, -35.9]]];
   for (const [name, at] of STATES) {

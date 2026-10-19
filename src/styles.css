@@ -331,9 +331,10 @@ p {
 @media (max-width: 820px) {
   .home {
     grid-template-columns: 1fr;
+    align-content: center;
   }
-  .home__art {
-    display: none;
+  .home__art img {
+    max-height: 42vh;
   }
   .home__panel {
     width: min(460px, 100%);

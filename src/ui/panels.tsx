@@ -154,7 +154,7 @@ export function Shop({ state, kind, dispatch }: { state: GameState; kind: 'card'
   const p = state.players[state.current];
   const ids = kind === 'card' ? CARD_IDS : ITEM_IDS;
   useEffect(() => sfx('shop'), []);
-  const keeper = kind === 'card' ? { name: 'Koala Kate', pic: 'koala-card', line: `G'day, ${p.name}! Pick a card.` } : { name: 'Tess the Turtle', pic: 'turtle-card', line: `Need a ride, ${p.name}? Scooters are popular!` };
+  const keeper = kind === 'card' ? { name: 'Koala Kate', pic: 'shopkeeper-card', line: `G'day, ${p.name}! Pick a card.` } : { name: 'Tess the Turtle', pic: 'shopkeeper-item', line: `Need a ride, ${p.name}? Scooters are popular!` };
   return (
     <div className={`shop shop--${kind}`} role="dialog" aria-label={kind === 'card' ? 'Card Shop' : 'Item Shop'}>
       <div className="shop__awning" aria-hidden="true" />
