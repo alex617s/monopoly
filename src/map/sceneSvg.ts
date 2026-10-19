@@ -163,7 +163,12 @@ function disc(x: number, y: number, kind: keyof typeof DISC_INFO) {
   const fs = label.length > 2 ? 22 : 34;
   return `<g><ellipse cx="${r1(x)}" cy="${r1(y + 9)}" rx="46" ry="28" fill="#000" opacity=".22"/><ellipse cx="${r1(x)}" cy="${r1(y + 7)}" rx="44" ry="27" fill="${shade(c, light ? -0.25 : -0.35)}"/>
 <ellipse cx="${r1(x)}" cy="${r1(y)}" rx="44" ry="27" fill="${c}" stroke="#fff" stroke-width="4"/><ellipse cx="${r1(x - 8)}" cy="${r1(y - 9)}" rx="24" ry="8" fill="#fff" opacity=".35"/>
-<text x="${r1(x)}" y="${r1(y + fs * 0.34)}" text-anchor="middle" class="disc-label" font-size="${fs}" fill="${light ? '#e5383b' : '#fff'}">${label}</text></g>`;
+${kind === 'points' ? gem(x, y - 2) : `<text x="${r1(x)}" y="${r1(y + fs * 0.34)}" text-anchor="middle" class="disc-label" font-size="${fs}" fill="${light ? '#e5383b' : '#fff'}">${label}</text>`}</g>`;
+}
+
+/** A sparkling blue gem, like the one on the player card. */
+function gem(x: number, y: number, s = 1) {
+  return `<g transform="translate(${r1(x)},${r1(y)}) scale(${s})"><path d="M-14 -11 h28 l9 11 -23 18 -23 -18z" fill="#5ed3ff" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M-23 0 h46 M-6 -11 l6 29 6 -29" stroke="#fff" stroke-width="2" fill="none" opacity=".85"/></g>`;
 }
 
 export function staticSvg(): string {
@@ -320,7 +325,7 @@ export function dynamicSvg(s: GameState, colors: Record<string, string>, hidePlo
       pk.kind === 'cash'
         ? `<path d="M-20 4 q-4 -26 12 -30 l-6 -8 h28 l-6 8 q16 4 12 30z" fill="#e0a800" stroke="#7a5200" stroke-width="3" stroke-linejoin="round"/><text x="0" y="-4" text-anchor="middle" class="pickup-mark">$</text>`
         : pk.kind === 'points'
-          ? `<path d="M-18 -26 h36 l10 14 -28 28 -28 -28z" fill="#5ed3ff" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M-8 -26 l8 42 8 -42" stroke="#fff" stroke-width="2" fill="none" opacity=".8"/>`
+          ? gem(0, -12, 1.3)
           : `<rect x="-22" y="-34" width="44" height="38" rx="5" fill="#b9783f" stroke="#5b3a1e" stroke-width="3"/><path d="M-22 -22 h44 M0 -34 v38" stroke="#5b3a1e" stroke-width="3"/><text x="0" y="-6" text-anchor="middle" class="pickup-mark">?</text>`;
     items.push([rd.y + 2, `<g class="pickup" transform="translate(${r1(rd.x)},${r1(rd.y - 18)})"><ellipse cx="0" cy="22" rx="24" ry="8" fill="#000" opacity=".2"/>${g}</g>`]);
   }

@@ -262,14 +262,14 @@ function collectPickup(s: GameState, p: PlayerState, road: number, rng: Rng) {
     notice(s, { player: p, title: 'A bag of money!', text: `${p.name} found $${pk.amount} on the road.`, tone: 'good' });
   } else if (pk.kind === 'points') {
     p.points += pk.amount;
-    notice(s, { player: p, title: 'Points bag!', text: `${p.name} found ${pk.amount} points.`, tone: 'good' });
+    notice(s, { player: p, title: 'Gem bag! 💎', text: `${p.name} found ${pk.amount} gems.`, tone: 'good' });
   } else if (p.items.length < RULES.maxItems) {
     const it = pickOne(rng, ITEM_IDS.filter((i) => i !== 'scooter' && i !== 'car'));
     p.items.push(it);
     notice(s, { player: p, title: 'Mystery box!', text: `Inside is a ${ITEMS[it].name}. ${ITEMS[it].desc}`, tone: 'good' });
   } else {
     p.points += 20;
-    notice(s, { player: p, title: 'Mystery box!', text: `${p.name}'s bag is full, so it turns into 20 points.`, tone: 'good' });
+    notice(s, { player: p, title: 'Mystery box!', text: `${p.name}'s bag is full, so it turns into 20 gems.`, tone: 'good' });
   }
 }
 
@@ -513,7 +513,7 @@ function stepTo(s: GameState, to: number, rng: Rng): 'ok' | 'pause' | 'stop' {
   if (road.disc === 'start') {
     gain(s, p, RULES.startBonus);
     p.points += RULES.startBonusPoints;
-    log(s, `${p.name} passed START: +$${RULES.startBonus}!`, 'good');
+    log(s, `${p.name} passed START: +$${RULES.startBonus} and ${RULES.startBonusPoints} gems 💎`, 'good');
   }
 
   if (s.bananas[to] !== undefined) {
@@ -640,7 +640,7 @@ function land(s: GameState, rng: Rng) {
     case 'points': {
       const pts = 10 + Math.floor(rng() * 3) * 10;
       p.points += pts;
-      log(s, `${p.name} collected ${pts} points!`, 'good');
+      log(s, `${p.name} collected ${pts} gems! 💎`, 'good');
       break;
     }
     case 'lucky': {
@@ -662,7 +662,7 @@ function land(s: GameState, rng: Rng) {
       break;
     case 'ferry':
       p.points += 10;
-      log(s, `${p.name} enjoys the ferry ride: +10 points.`, 'good');
+      log(s, `${p.name} enjoys the ferry ride: +10 gems 💎`, 'good');
       break;
     case 'airport': {
       const pair = FLIGHTS.find((f) => f.includes(p.pos))!;
@@ -943,7 +943,7 @@ function shopBuy(s: GameState, shop: 'card' | 'item', id: string) {
   if (shop === 'card') {
     const c = CARDS[id as CardId];
     if (!c) throw new RuleError('No such card.');
-    if (p.points < c.price) throw new RuleError('Not enough points.');
+    if (p.points < c.price) throw new RuleError('Not enough gems.');
     if (p.cards.length >= RULES.maxCards) throw new RuleError('Your hand is full.');
     p.points -= c.price;
     p.cards.push(id as CardId);
@@ -951,7 +951,7 @@ function shopBuy(s: GameState, shop: 'card' | 'item', id: string) {
   } else {
     const it = ITEMS[id as ItemId];
     if (!it) throw new RuleError('No such item.');
-    if (p.points < it.price) throw new RuleError('Not enough points.');
+    if (p.points < it.price) throw new RuleError('Not enough gems.');
     p.points -= it.price;
     if (id === 'scooter' || id === 'car') {
       p.vehicle = { kind: id, days: RULES.vehicleDays };

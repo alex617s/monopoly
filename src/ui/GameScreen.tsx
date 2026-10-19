@@ -127,8 +127,8 @@ export function GameScreen({ state, myIds, dispatch, isHost, deadline, onExit, e
           <Icon name="chart" /> <span>Total assets</span> <b>{money(totalAssets(state, focusP))}</b>
         </div>
         <div className="chips">
-          <span className="chip chip--dark">
-            <Icon name="gem" size={18} /> {focusP.points}
+          <span className="chip chip--dark" title="Gems: spend them in the shops">
+            <Icon name="gem" size={18} /> {focusP.points} <small>gems</small>
           </span>
           {focusP.god && (
             <span className="chip" style={{ borderColor: GODS[focusP.god.id].color }}>

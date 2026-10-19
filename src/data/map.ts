@@ -355,18 +355,18 @@ export function roadsAhead(from: number, dir: 1 | -1, count: number): number[] {
 }
 
 export const DISC_INFO: Record<DiscKind, { label: string; name: string; color: string; desc: string }> = {
-  start: { label: 'START', name: 'START', color: '#e8772e', desc: 'Collect $200 and 10 points every time you pass.' },
+  start: { label: 'START', name: 'START', color: '#e8772e', desc: 'Collect $200 and 10 gems every time you pass.' },
   card: { label: 'CARD', name: 'Card', color: '#1b6fc2', desc: 'Get a free card.' },
   chance: { label: '?', name: 'Chance', color: '#7b4fc0', desc: 'Something good or bad happens.' },
   news: { label: 'NEWS', name: 'News', color: '#d6342c', desc: 'Breaking news for everyone.' },
-  itemShop: { label: 'ITEM', name: 'Item Shop', color: '#f08a1c', desc: 'Buy items with points.' },
-  cardShop: { label: 'SHOP', name: 'Card Shop', color: '#c2276b', desc: 'Buy cards with points.' },
+  itemShop: { label: 'ITEM', name: 'Item Shop', color: '#f08a1c', desc: 'Buy items with gems.' },
+  cardShop: { label: 'SHOP', name: 'Card Shop', color: '#c2276b', desc: 'Buy cards with gems.' },
   bank: { label: 'BANK', name: 'Bank', color: '#1a7d47', desc: 'Save or take out money. You can use it when you pass, too.' },
-  points: { label: '★', name: 'Points', color: '#0f8a8a', desc: 'Collect 10 to 30 points.' },
+  points: { label: '💎', name: 'Gems', color: '#0f8a8a', desc: 'Collect 10 to 30 gems.' },
   park: { label: 'PARK', name: 'Park', color: '#3c9a4f', desc: 'Have a rest. Nothing happens.' },
   lucky: { label: 'SPIN', name: 'Lucky Wheel', color: '#e0a800', desc: 'Free spin: 1–5 wins $10 × the number, 6 wins $200.' },
   hospital: { label: '+', name: 'Hospital', color: '#ffffff', desc: 'Players who get hurt rest here.' },
   airport: { label: 'FLY', name: 'Airport', color: '#3a86ff', desc: 'Pay $100 to fly to the other airport, across Australia.' },
-  ferry: { label: 'BOAT', name: 'Ferry', color: '#0f6fa8', desc: 'Enjoy the ferry ride: collect 10 points.' },
+  ferry: { label: 'BOAT', name: 'Ferry', color: '#0f6fa8', desc: 'Enjoy the ferry ride: collect 10 gems.' },
   jail: { label: 'JAIL', name: 'Jail', color: '#566079', desc: 'Stop here and you stay in Jail for 2 turns.' },
 };

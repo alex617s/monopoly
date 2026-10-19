@@ -162,7 +162,7 @@ export function Shop({ state, kind, dispatch }: { state: GameState; kind: 'card'
         <h2>{kind === 'card' ? `${keeper.name}'s Card Shop` : `${keeper.name}'s Item Shop`}</h2>
         <div className="shop__right">
           <span className="gems">
-            <Icon name="gem" size={26} /> {p.points}
+            <Icon name="gem" size={26} /> {p.points} gems
           </span>
           <button type="button" className="btn btn--red" onClick={() => dispatch({ type: 'shopLeave' })}>
             Leave
@@ -204,7 +204,7 @@ export function Shop({ state, kind, dispatch }: { state: GameState; kind: 'card'
                     disabled={p.points < def.price || full}
                     onClick={() => dispatch({ type: 'shopBuy', id })}
                   >
-                    Buy
+                    {p.points < def.price ? 'Not enough gems' : 'Buy'}
                   </button>
                 </div>
               </div>
@@ -455,7 +455,7 @@ export function PlayerDetail({ state, player, onClose }: { state: GameState; pla
         <b>{money(landValue(state, player.id))}</b>
         <span>Total assets</span>
         <b className="big">{money(totalAssets(state, player))}</b>
-        <span>Points</span>
+        <span>Gems 💎 (spend in the shops)</span>
         <b>{player.points}</b>
       </div>
       {player.god && (
@@ -527,8 +527,8 @@ export function HowToPlay({ onClose }: { onClose: () => void }) {
         <li>Tap SPIN and travel around Australia. At a crossroads, tap a sign to pick your way: along the coast, through the desert past Uluru, down the Stuart Highway, via Canberra, or by ferry to Tasmania.</li>
         <li>Stop next to empty land to buy it. Stop on your own land to build, one level at a time (up to 2). Walk past it and you may pay to build 1 level.</li>
         <li>Buildings go Tent, Cabin, Holiday House, Hotel, Skyscraper. Bigger buildings mean bigger tolls!</li>
-        <li>Pick up money bags, points and mystery boxes lying on the road. Fly between Sydney and Perth airports for {money(RULES.flightFee)}.</li>
-        <li>Collect points and spend them in the Card Shop and Item Shop. Use one card and one item before you spin. Watch out for bananas, bombs and Monster Trucks!</li>
+        <li>Pick up money bags, gem bags and mystery boxes lying on the road. Fly between Sydney and Perth airports for {money(RULES.flightFee)}.</li>
+        <li>Collect gems 💎 and spend them in the Card Shop and Item Shop. Use one card and one item before you spin. Watch out for bananas, bombs and Monster Trucks!</li>
         <li>Gods appear on the road. Good ones help for 3 days. Pass a bad one to a friend by walking past them!</li>
         <li>Run out of money and the bank rescues you once. The second time you are out.</li>
         <li>The host taps End Game for a last round. The richest explorer wins!</li>
