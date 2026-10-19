@@ -619,6 +619,65 @@ p {
   z-index: 2;
   pointer-events: none;
 }
+.piece--slow {
+  transition: left 0.72s ease-in-out, top 0.72s ease-in-out;
+}
+.piece--ride .piece__figure {
+  bottom: 12px;
+}
+.ride {
+  position: absolute;
+  left: -70px;
+  top: -64px;
+  width: 140px;
+  height: 90px;
+  object-fit: contain;
+  object-position: 50% 100%;
+  filter: drop-shadow(0 6px 4px rgba(0, 0, 0, 0.3));
+}
+.ride--boat {
+  top: -56px;
+  animation: bobbing 0.9s ease-in-out infinite alternate;
+}
+@keyframes bobbing {
+  to {
+    transform: translateY(-5px) rotate(-2deg);
+  }
+}
+.flight {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 6;
+  offset-rotate: 0deg;
+  animation: fly 3.1s ease-in-out both;
+  pointer-events: none;
+}
+@keyframes fly {
+  from {
+    offset-distance: 0%;
+  }
+  to {
+    offset-distance: 100%;
+  }
+}
+.flight__craft {
+  position: relative;
+  width: 190px;
+  height: 126px;
+  transform: translate(-50%, -50%) scale(2.6);
+}
+.flight__craft--west svg {
+  transform: scaleX(-1);
+}
+.flight__rider {
+  position: absolute;
+  left: 60px;
+  top: -30px;
+  width: 70px;
+  height: 80px;
+  object-fit: contain;
+}
 .piece__shadow {
   position: absolute;
   left: -34px;
@@ -1693,6 +1752,41 @@ p {
   font-size: 21px;
   font-weight: 800;
 }
+.overlay--soft {
+  background: rgba(10, 20, 40, 0.3);
+  justify-content: flex-start;
+  padding-top: max(150px, 18vh);
+  animation: fade 0.15s ease-out;
+}
+.line-box {
+  width: min(560px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px 12px 12px;
+  border-radius: 24px;
+  background: #fff;
+  border: 5px solid var(--blue);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  animation: pop-in 0.22s ease-out;
+}
+.line-box--good {
+  border-color: var(--go);
+}
+.line-box--bad {
+  border-color: var(--red);
+}
+.line-box p {
+  margin: 0;
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 23px;
+  line-height: 1.2;
+}
+.line-box b {
+  font-weight: 800;
+  color: var(--blue-d);
+}
 .notice {
   width: min(460px, 100%);
   padding: 20px 22px 14px;
@@ -1919,6 +2013,16 @@ p {
   flex-direction: column;
   gap: 10px;
   animation: pop-in 0.2s ease-out;
+}
+.confirm {
+  width: min(420px, 100%);
+  text-align: center;
+}
+.confirm__buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 6px;
 }
 .menu {
   width: min(400px, 100%);

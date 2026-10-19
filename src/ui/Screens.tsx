@@ -1,8 +1,7 @@
-import { useState, useSyncExternalStore } from 'react';
-import { audioSettings, setAudioSettings, subscribeAudio } from '../audio/sound';
+import { useState } from 'react';
 import { CHARACTERS } from '../data/content';
 import { RULES } from '../data/rules';
-import { Avatar, art } from './common';
+import { Avatar, art, useScreenMusic } from './common';
 
 export function Logo({ small }: { small?: boolean }) {
   return (
@@ -15,17 +14,8 @@ export function Logo({ small }: { small?: boolean }) {
 
 const ONLINE = import.meta.env.VITE_NO_ONLINE !== '1';
 
-export function Home(p: {
-  canResume: boolean;
-  hostRoom: string | null;
-  onLocal: () => void;
-  onResume: () => void;
-  onHost: () => void;
-  onJoin: () => void;
-  onReopen: (code: string) => void;
-  onHelp: () => void;
-}) {
-  const audio = useSyncExternalStore(subscribeAudio, audioSettings);
+export function Home(p: { onLocal: () => void; onHost: () => void; onJoin: () => void; onHelp: () => void }) {
+  useScreenMusic(null);
   return (
     <div className="home">
       <div className="home__art">
@@ -34,12 +24,7 @@ export function Home(p: {
       <div className="home__panel">
         <Logo />
         <p className="home__tag">Explore Australia with family and friends!</p>
-        {p.canResume && (
-          <button type="button" className="btn btn--go btn--big btn--wide" onClick={p.onResume}>
-            Resume Game
-          </button>
-        )}
-        <button type="button" className={`btn btn--big btn--wide ${p.canResume ? '' : 'btn--go'}`} onClick={p.onLocal}>
+        <button type="button" className="btn btn--big btn--wide btn--go" onClick={p.onLocal}>
           Play on This Device
         </button>
         {ONLINE ? (
@@ -50,11 +35,6 @@ export function Home(p: {
             <button type="button" className="btn btn--wide" onClick={p.onJoin}>
               Join a Friend's Game
             </button>
-            {p.hostRoom && (
-              <button type="button" className="btn btn--wide" onClick={() => p.onReopen(p.hostRoom!)}>
-                Reopen Room {p.hostRoom}
-              </button>
-            )}
           </>
         ) : (
           <p className="muted center">Online play and video chat work on the full game website.</p>
@@ -62,9 +42,6 @@ export function Home(p: {
         <div className="home__small">
           <button type="button" className="btn btn--ghost" onClick={p.onHelp}>
             How to Play
-          </button>
-          <button type="button" className="btn btn--ghost" onClick={() => setAudioSettings({ music: !audio.music })}>
-            Music: {audio.music ? 'On' : 'Off'}
           </button>
         </div>
       </div>
@@ -99,6 +76,7 @@ export function LocalSetup({ onStart, onBack }: { onStart: (players: SetupPlayer
     { name: '', character: 'kangaroo', auto: false },
     { name: '', character: 'koala', auto: true },
   ]);
+  useScreenMusic('lobby');
   const update = (i: number, patch: Partial<SetupPlayer>) => setPlayers((ps) => ps.map((p, k) => (k === i ? { ...p, ...patch } : p)));
   const add = () => {
     const used = new Set(players.map((p) => p.character));
@@ -164,6 +142,7 @@ export function LocalSetup({ onStart, onBack }: { onStart: (players: SetupPlayer
 }
 
 export function ProfileForm({ title, intro, taken, submit, onSubmit, onBack }: { title: string; intro: string; taken: string[]; submit: string; onSubmit: (name: string, character: string) => void; onBack: () => void }) {
+  useScreenMusic('lobby');
   const [name, setName] = useState('');
   const [character, setCharacter] = useState(() => CHARACTERS.find((c) => !taken.includes(c.id))?.id ?? 'kangaroo');
   return (
@@ -197,6 +176,7 @@ export function ProfileForm({ title, intro, taken, submit, onSubmit, onBack }: {
 }
 
 export function Notice({ title, text, children }: { title: string; text?: string | null; children?: React.ReactNode }) {
+  useScreenMusic('lobby');
   return (
     <div className="screen">
       <Logo small />

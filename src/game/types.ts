@@ -55,6 +55,7 @@ export type GameEvent =
   | { seq: number; type: 'spin'; playerId: string; wheels: number[]; remote: boolean }
   | { seq: number; type: 'step'; playerId: string; to: number }
   | { seq: number; type: 'jump'; playerId: string; to: number }
+  | { seq: number; type: 'fly'; playerId: string; from: number; to: number }
   | { seq: number; type: 'toast'; text: string; tone: 'good' | 'bad' | 'info' }
   | { seq: number; type: 'say'; playerId: string; text: string }
   | { seq: number; type: 'money'; playerId: string; amount: number }

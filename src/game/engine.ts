@@ -1094,8 +1094,8 @@ export function reduce(state: GameState, action: Action, rng: Rng = Math.random)
       if (action.yes && p.cash >= pend.fee) {
         p.cash -= pend.fee;
         emit(s, { type: 'money', playerId: p.id, amount: -pend.fee });
+        emit(s, { type: 'fly', playerId: p.id, from: p.pos, to: pend.to });
         p.pos = pend.to;
-        emit(s, { type: 'jump', playerId: p.id, to: pend.to });
         log(s, `${p.name} flew across Australia!`, 'good');
       }
       endTurn(s, rng);

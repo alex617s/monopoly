@@ -45,6 +45,7 @@ export type HostMsg =
   | { t: 'welcome'; playerId: string }
   | { t: 'sync'; room: RoomInfo; game: GameState | null; deadline: number | null }
   | { t: 'emote'; key: number; playerId: string; text: string }
+  | { t: 'closed' }
   | { t: 'forceMute' }
   | { t: 'removedFromCall' };
 

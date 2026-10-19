@@ -1,4 +1,5 @@
-import { CSSProperties, ReactNode, useEffect, useState } from 'react';
+import { CSSProperties, ReactNode, useEffect, useRef, useState } from 'react';
+import { Track, setMusic, setTapSounds, sfx } from '../audio/sound';
 import { characterById } from '../data/content';
 
 export const art = (name: string) => `${import.meta.env.BASE_URL}art/${name}.png`;
@@ -150,4 +151,41 @@ export function Icon({ name, size = 24 }: { name: string; size?: number }) {
     default:
       return null;
   }
+}
+
+/** Picks the music for the screen being shown. The home screen passes null and stays silent. */
+export function useScreenMusic(track: Track | null | undefined) {
+  useEffect(() => {
+    if (track === undefined) return; // a game screen inside picks its own music
+    setMusic(track);
+    setTapSounds(track !== null);
+  }, [track]);
+}
+
+/** Plays a little chime when someone joins or leaves. */
+export function useJoinChime(count: number) {
+  const last = useRef(count);
+  useEffect(() => {
+    if (count > last.current) sfx('join');
+    else if (count < last.current) sfx('leave');
+    last.current = count;
+  }, [count]);
+}
+
+/** A yes / no question drawn by the game itself (browser pop-ups don't show everywhere). */
+export function ConfirmDialog({ title, text, yes, no = 'Cancel', danger, onYes, onNo }: { title: string; text?: string; yes: string; no?: string; danger?: boolean; onYes: () => void; onNo: () => void }) {
+  return (
+    <Modal label={title} onClose={onNo} className="confirm">
+      <h2>{title}</h2>
+      {text && <p className="muted">{text}</p>}
+      <div className="confirm__buttons">
+        <button type="button" className="btn btn--big" onClick={onNo}>
+          {no}
+        </button>
+        <button type="button" className={`btn btn--big ${danger ? 'btn--red' : 'btn--go'}`} onClick={onYes}>
+          {yes}
+        </button>
+      </div>
+    </Modal>
+  );
 }

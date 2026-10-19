@@ -1,5 +1,5 @@
 import { CSSProperties, ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { audioSettings, setAudioSettings, setMusic, sfx, subscribeAudio } from '../audio/sound';
+import { audioSettings, setAudioSettings, setMusic, setTapSounds, sfx, subscribeAudio } from '../audio/sound';
 import { GODS } from '../data/content';
 import { MiniMap } from '../map/MiniMap';
 import { Scene } from '../map/Scene';
@@ -55,7 +55,7 @@ export function GameScreen({ state, myIds, dispatch, isHost, deadline, onExit, e
   const tense = !!state.lastRound && !state.over;
   useEffect(() => {
     setMusic(state.over ? null : tense ? 'last' : 'main');
-    return () => setMusic('main');
+    setTapSounds(true);
   }, [tense, state.over]);
   const forkNow = myTurnReady && pend?.kind === 'fork';
   useEffect(() => {
@@ -291,7 +291,7 @@ export function GameScreen({ state, myIds, dispatch, isHost, deadline, onExit, e
               {state.lastRound ? 'Last round is on' : 'End Game (last round)'}
             </button>
           )}
-          <button type="button" className="btn btn--wide btn--red" onClick={onExit}>
+          <button type="button" className="btn btn--wide btn--red" onClick={() => { setMenu(false); onExit(); }}>
             {exitLabel}
           </button>
           <button type="button" className="btn btn--wide btn--ghost" onClick={() => setMenu(false)}>

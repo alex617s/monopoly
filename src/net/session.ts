@@ -10,7 +10,7 @@ import { uid } from '../util';
 import { MediaMesh } from './media';
 import { GuestMsg, HostMsg, Member, Pending, RoomInfo, clientIdFor, hostPeerId, normaliseCode, peerOptions } from './protocol';
 
-export type SessionStatus = 'connecting' | 'info' | 'waiting' | 'joined' | 'rejected' | 'lost' | 'error';
+export type SessionStatus = 'connecting' | 'info' | 'waiting' | 'joined' | 'rejected' | 'lost' | 'closed' | 'error';
 
 export interface Emote {
   key: number;
@@ -106,15 +106,16 @@ interface HostSave {
   hostClientId: string;
 }
 
+// The room is kept only for this browser tab, so a reload carries on; once
+// the tab is closed or the room is closed, it is gone for good.
 const hostSaveKey = (code: string) => `aa2-host-${code}`;
-
-export function savedHostRoom(): string | null {
+const roomStore = (): Storage | null => {
   try {
-    return localStorage.getItem('aa2-host-last');
+    return sessionStorage;
   } catch {
     return null;
   }
-}
+};
 
 export class HostSession extends Session {
   private conns = new Map<string, DataConnection>();
@@ -175,7 +176,7 @@ export class HostSession extends Session {
 
   static load(code: string): HostSave | null {
     try {
-      const raw = localStorage.getItem(hostSaveKey(code));
+      const raw = roomStore()?.getItem(hostSaveKey(code)) ?? null;
       const save = raw ? (JSON.parse(raw) as HostSave) : null;
       return save && (!save.game || save.game.version === 2) ? save : null;
     } catch {
@@ -186,8 +187,7 @@ export class HostSession extends Session {
   private persist() {
     try {
       const save: HostSave = { room: this.snap.room!, game: this.snap.game, hostClientId: this.clientId };
-      localStorage.setItem(hostSaveKey(this.snap.code), JSON.stringify(save));
-      localStorage.setItem('aa2-host-last', this.snap.code);
+      roomStore()?.setItem(hostSaveKey(this.snap.code), JSON.stringify(save));
     } catch {
       /* storage unavailable: the room still works, it just can't be reopened */
     }
@@ -404,13 +404,10 @@ export class HostSession extends Session {
   }
 
   endRoom() {
-    try {
-      localStorage.removeItem(hostSaveKey(this.snap.code));
-      localStorage.removeItem('aa2-host-last');
-    } catch {
-      /* ignore */
-    }
-    this.destroy();
+    roomStore()?.removeItem(hostSaveKey(this.snap.code));
+    this.broadcastMsg({ t: 'closed' });
+    // give the goodbye a moment to reach everyone
+    setTimeout(() => this.destroy(), 400);
   }
 }
 
@@ -423,6 +420,7 @@ export class GuestSession extends Session {
   private retryTimer: number | undefined;
   private closed = false;
   private wasJoined = false;
+  private missing = 0;
 
   constructor(code: string) {
     super(undefined);
@@ -457,7 +455,13 @@ export class GuestSession extends Session {
     this.peer.on('error', (err) => {
       const type = (err as { type?: string }).type;
       if (type === 'peer-unavailable') {
-        this.set({ status: 'lost', message: "Can't find this room. Check the code, or wait for the host to open it." });
+        // A room that was there before and has gone away for a while is closed.
+        if (this.wasJoined && ++this.missing >= 4) {
+          this.closed = true;
+          this.set({ status: 'closed', message: 'The host closed the room.' });
+          return;
+        }
+        this.set({ status: 'lost', message: this.wasJoined ? 'Lost the host. Trying again…' : "Can't find this room. Check the code, or wait for the host to open it." });
         this.scheduleRetry();
         return;
       }
@@ -499,7 +503,12 @@ export class GuestSession extends Session {
         this.profile = null;
         this.set({ status: 'rejected', message: msg.reason });
         break;
+      case 'closed':
+        this.closed = true;
+        this.set({ status: 'closed', message: 'The host closed the room.' });
+        break;
       case 'welcome':
+        this.missing = 0;
         this.set({ status: 'joined', myPlayerId: msg.playerId, message: null });
         if (this.wasJoined) this.set({ welcomeBack: true });
         this.wasJoined = true;

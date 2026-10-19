@@ -11,10 +11,11 @@ export function animationMs(events: GameEvent[]) {
     if (e.type === 'spin') ms += 2400;
     else if (e.type === 'step') ms += 270;
     else if (e.type === 'jump') ms += 800;
+    else if (e.type === 'fly') ms += 3600;
     else if (e.type === 'news') ms += 3700;
     else if (e.type === 'chance') ms += 2900;
     else if (e.type === 'lastRound') ms += 2700;
-    else if (e.type === 'toast') ms += 120;
+    else if (e.type === 'toast') ms += 1900;
     else if (e.type === 'turn') ms += 150;
     else if (e.type === 'notice') ms += 2700;
     else if (e.type === 'build') ms += 1550;

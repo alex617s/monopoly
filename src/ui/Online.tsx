@@ -5,7 +5,7 @@ import { GuestSession, HostSession } from '../net/session';
 import { Member, isValidCode, joinLink, normaliseCode } from '../net/protocol';
 import { CallPanel } from './CallPanel';
 import { GameScreen } from './GameScreen';
-import { Avatar } from './common';
+import { Avatar, ConfirmDialog, useJoinChime, useScreenMusic } from './common';
 import { Logo, Notice, ProfileForm } from './Screens';
 import { useTurnDriver } from './useTurnDriver';
 
@@ -103,12 +103,26 @@ function HostInner({ session, onExit, onRetry }: { session: HostSession; onExit:
   const deadline = useTurnDriver(playing ? snap.game : null, (a) => session.applyAuthority(a), playing);
   useEffect(() => session.setDeadline(deadline), [session, deadline]);
 
-  const endRoom = () => {
-    if (window.confirm('Close this room for everyone?')) {
-      session.endRoom();
-      onExit();
-    }
+  const [asking, setAsking] = useState(false);
+  useScreenMusic(playing ? undefined : 'lobby');
+  useJoinChime(room.members.filter((m) => m.connected).length + snap.pending.length);
+  const close = () => {
+    session.endRoom();
+    onExit();
   };
+  // A finished game just closes; otherwise check first.
+  const endRoom = () => (snap.game?.over ? close() : setAsking(true));
+  const dialog = asking && (
+    <ConfirmDialog
+      title="Close this room?"
+      text="The game ends for everyone in the room."
+      yes="Close Room"
+      no="Keep Playing"
+      danger
+      onNo={() => setAsking(false)}
+      onYes={close}
+    />
+  );
 
   const call = (
     <CallPanel
@@ -124,8 +138,8 @@ function HostInner({ session, onExit, onRetry }: { session: HostSession; onExit:
   if (snap.status === 'error') {
     return (
       <Notice title="Online play problem" text={snap.message}>
-        <button type="button" className="btn btn--big" onClick={onExit}>
-          Home
+        <button type="button" className="btn btn--big" onClick={close}>
+          Close Room
         </button>
         <button type="button" className="btn btn--go btn--big" onClick={onRetry}>
           Try Again
@@ -150,6 +164,7 @@ function HostInner({ session, onExit, onRetry }: { session: HostSession; onExit:
           emotes={snap.emotes}
           onEmote={(_, text) => session.emote(text)}
         />
+        {dialog}
         {snap.pending.length > 0 && (
           <div className="toast toast--fixed">
             {snap.pending.map((p) => (
@@ -254,6 +269,7 @@ function HostInner({ session, onExit, onRetry }: { session: HostSession; onExit:
         </div>
         <div>{call}</div>
       </div>
+      {dialog}
     </div>
   );
 }
@@ -272,11 +288,23 @@ function GuestInner({ session, onExit }: { session: GuestSession; onExit: () => 
     session.leaveRoom();
     onExit();
   };
+  const [asking, setAsking] = useState(false);
+  const inGame = !!(snap.room?.started && snap.game && snap.status !== 'closed');
+  useScreenMusic(inGame ? undefined : 'lobby');
+  useJoinChime(snap.room?.members.filter((m) => m.connected).length ?? 0);
   const homeBtn = (
     <button type="button" className="btn btn--big" onClick={leave}>
       Home
     </button>
   );
+
+  if (snap.status === 'closed') {
+    return (
+      <Notice title="The room is closed" text="The host closed the room. Thanks for playing!">
+        {homeBtn}
+      </Notice>
+    );
+  }
 
   if (snap.status === 'rejected') return <Notice title="Can't join this room" text={snap.message}>{homeBtn}</Notice>;
   if (snap.status === 'error') return <Notice title="Online play problem" text={snap.message}>{homeBtn}</Notice>;
@@ -294,7 +322,7 @@ function GuestInner({ session, onExit }: { session: GuestSession; onExit: () => 
             dispatch={(a) => session.dispatch(a)}
             isHost={false}
             deadline={snap.deadline}
-            onExit={() => window.confirm('Leave this game? The computer will play for you.') && leave()}
+            onExit={() => (snap.game!.over ? leave() : setAsking(true))}
             exitLabel="Leave Game"
             roomCode={snap.code}
             side={call}
@@ -302,6 +330,17 @@ function GuestInner({ session, onExit }: { session: GuestSession; onExit: () => 
             onEmote={(_, text) => session.emote(text)}
           />
           {banner}
+          {asking && (
+            <ConfirmDialog
+              title="Leave this game?"
+              text="The computer will play for you."
+              yes="Leave Game"
+              no="Keep Playing"
+              danger
+              onNo={() => setAsking(false)}
+              onYes={leave}
+            />
+          )}
           {snap.welcomeBack && me?.auto && !me.out && (
             <div className="modal-bg">
               <div className="modal center" role="dialog" aria-label="Welcome back">

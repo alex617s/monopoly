@@ -95,6 +95,20 @@ export function OverlayView({ overlay, state, onSkip }: { overlay: Overlay; stat
       </div>
     );
   }
+  if (overlay.kind === 'line') {
+    const p = overlay.playerId ? player(overlay.playerId) : null;
+    // the players' names stand out in bold
+    const names = state.players.map((x) => x.name).filter(Boolean);
+    const parts = names.length ? overlay.text.split(new RegExp(`(${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`)) : [overlay.text];
+    return (
+      <div className="overlay overlay--soft" onClick={onSkip}>
+        <div className={`line-box line-box--${overlay.tone}`} role="status">
+          {p && <Avatar character={p.character} size={60} ring={p.color} />}
+          <p>{parts.map((t, i) => (names.includes(t) ? <b key={i}>{t}</b> : t))}</p>
+        </div>
+      </div>
+    );
+  }
   if (overlay.kind === 'notice') {
     const p = overlay.playerId ? player(overlay.playerId) : null;
     return (

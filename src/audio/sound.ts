@@ -23,8 +23,10 @@ export type Sfx =
   | 'goodGod'
   | 'badGod'
   | 'lastRound'
+  | 'join'
+  | 'leave'
   | 'win';
-export type Track = 'main' | 'last';
+export type Track = 'main' | 'last' | 'lobby';
 
 export interface AudioSettings {
   music: boolean;
@@ -301,6 +303,8 @@ const SFX: Record<Sfx, (t: number) => void> = {
     [57, 64, 69, 72].forEach((m) => tone({ f: mtof(m), t: t + 1.1, dur: 1.4, type: 'sawtooth', vol: 0.065, lp: 2200, attack: 0.02 }));
     tone({ f: 55, dur: 1.2, type: 'sine', vol: 0.45, t: t + 1.1, to: 45 });
   },
+  join: (t) => notes([72, 76, 79, 84], t, 0.08, { dur: 0.3, type: 'triangle', vol: 0.16 }),
+  leave: (t) => notes([79, 74, 67], t, 0.1, { dur: 0.3, type: 'triangle', vol: 0.14 }),
   win: (t) => {
     const mel: [number, number, number][] = [
       [67, 0, 0.15],
@@ -320,6 +324,13 @@ const SFX: Record<Sfx, (t: number) => void> = {
     for (let i = 0; i < 10; i++) noise({ t: t + 1.7 + i * 0.12, dur: 0.08, vol: 0.11, f: 6000, type: 'highpass' });
   },
 };
+
+let tapSounds = true;
+/** The home screen stays completely quiet. */
+export function setTapSounds(on: boolean) {
+  tapSounds = on;
+}
+export const tapSoundsOn = () => tapSounds;
 
 const lastPlayed: Partial<Record<Sfx, number>> = {};
 export function sfx(name: Sfx) {
@@ -357,6 +368,9 @@ const MAIN_MEL = [72,_,76,79, 76,_,72,74, 76,_,72,69, 72,_,_,_, 77,_,76,74, 72,_
 const MAIN_CHORDS = [48, 45, 41, 43, 48, 45, 41, 43];
 const LAST_MEL = [69,72,76,72, 69,72,76,77, 76,74,72,71, 69,_,_,_, 65,69,72,69, 65,69,72,74, 74,72,71,72, 71,_,68,_]; // prettier-ignore
 const LAST_CHORDS = [45, 41, 43, 40];
+const LOBBY_CHORDS = [[53, 57, 60, 65], [50, 53, 57, 62], [46, 50, 53, 58], [48, 52, 55, 60]];
+const LOBBY_MEL = [72,_,_,74, 76,_,72,_, 69,_,_,_, _,_,_,_, 70,_,_,72, 74,_,70,_, 72,_,_,_, _,_,_,_,
+  72,_,_,74, 76,_,79,_, 77,_,76,74, 72,_,_,_, 70,_,69,70, 72,_,67,_, 65,_,_,_, _,_,_,_]; // prettier-ignore
 
 const SONGS: Record<Track, Song> = {
   // "Bush Bounce": a bouncy cartoon tune in C major
@@ -374,6 +388,24 @@ const SONGS: Record<Track, Song> = {
       if (s % 2 === 1) [0, root === 45 ? 3 : 4, 7].forEach((k) => tone({ f: mtof(root + 24 + k), t, dur: len * 0.7, type: 'triangle', vol: 0.022, out: musicBus }));
       const m = MAIN_MEL[i % MAIN_MEL.length];
       if (m) pluck(m, t, len * 1.8);
+    },
+  },
+  // "Beach Lobby": relaxed ukulele strums and a lazy whistle tune, in F major
+  lobby: {
+    bpm: 92,
+    length: 64,
+    step(i, t, len) {
+      const s = i % 8;
+      const ch = LOBBY_CHORDS[Math.floor(i / 8) % 4];
+      if ([0, 3, 4, 6].includes(s)) ch.forEach((m, k) => tone({ f: mtof(m + 12), t: t + k * 0.012, dur: len * 1.6, type: 'triangle', vol: s === 0 ? 0.045 : 0.03, lp: 2600, out: musicBus }));
+      if (s === 0) bass(ch[0] - 12, t, len * 3, 0.16);
+      if (s === 4) bass(ch[0] - 5, t, len * 2, 0.12);
+      noise({ t, dur: 0.05, vol: s % 2 ? 0.025 : 0.04, f: 6000, type: 'highpass', out: musicBus });
+      const m = LOBBY_MEL[i % LOBBY_MEL.length];
+      if (m) {
+        tone({ f: mtof(m), t, dur: len * 2.4, type: 'sine', vol: 0.09, attack: 0.04, out: musicBus });
+        tone({ f: mtof(m) * 1.003, t, dur: len * 2.4, type: 'sine', vol: 0.04, attack: 0.05, out: musicBus });
+      }
     },
   },
   // the last round: faster and a little tense, in A minor

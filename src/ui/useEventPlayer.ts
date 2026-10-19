@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sfx, sfx } from '../audio/sound';
 import { GODS } from '../data/content';
+import { ROADS } from '../data/map';
 import type { GameEvent, GameState } from '../game/types';
 
 export interface Bubble {
@@ -23,6 +24,7 @@ export type Overlay =
   | { kind: 'chance'; playerId: string; text: string }
   | { kind: 'lastRound' }
   | { kind: 'spin'; playerId: string; wheels: number[]; remote: boolean }
+  | { kind: 'line'; playerId: string | null; text: string; tone: 'good' | 'bad' | 'info' }
   | { kind: 'notice'; playerId: string | null; title: string; text: string; art: string | null; tone: 'good' | 'bad' | 'info'; days: number | null };
 
 export interface Display {
@@ -34,6 +36,10 @@ export interface Display {
   bubbles: Bubble[];
   toasts: Toast[];
   pops: MoneyPop[];
+  /** Someone on a plane right now. */
+  flight: { playerId: string; from: number; to: number; key: number } | null;
+  /** Someone taking a slow step (on the ferry). */
+  slow: string | null;
   /** A building going up right now, which the map animates. */
   building: { plot: number; level: number; key: number } | null;
   skip: () => void;
@@ -67,9 +73,13 @@ export function useEventPlayer(state: GameState): Display {
   const [busy, setBusy] = useState(false);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toasts: Toast[] = [];
   const [pops, setPops] = useState<MoneyPop[]>([]);
   const [building, setBuilding] = useState<Display['building']>(null);
+  const [flight, setFlight] = useState<Display['flight']>(null);
+  const [slow, setSlow] = useState<string | null>(null);
+  const posRef = useRef(pos);
+  posRef.current = pos;
   const lastSeq = useRef(state.eventSeq);
   const queue = useRef<GameEvent[]>([]);
   const running = useRef(false);
@@ -106,6 +116,7 @@ export function useEventPlayer(state: GameState): Display {
       }
       running.current = false;
       setHopping(null);
+      setSlow(null);
       setPos(positions(latest.current));
       setBusy(false);
     })();
@@ -125,13 +136,27 @@ export function useEventPlayer(state: GameState): Display {
         await wait(2300);
         setOverlay(null);
         return;
-      case 'step':
+      case 'step': {
         setFocus(e.playerId);
-        setHopping(e.playerId);
+        const from = posRef.current[e.playerId];
+        const byBoat = ROADS[e.to].disc === 'ferry' || (from !== undefined && ROADS[from].disc === 'ferry');
+        const riding = !!latest.current.players.find((p) => p.id === e.playerId)?.vehicle;
+        setSlow(byBoat ? e.playerId : null);
+        setHopping(riding || byBoat ? null : e.playerId);
         sfx('step');
         setPos((p) => ({ ...p, [e.playerId]: e.to }));
-        await sleep(270);
+        await sleep(byBoat ? 750 : 270);
         setHopping(null);
+        return;
+      }
+      case 'fly':
+        setFocus(e.playerId);
+        sfx('start');
+        setFlight({ playerId: e.playerId, from: e.from, to: e.to, key: e.seq });
+        await sleep(3200);
+        setPos((p) => ({ ...p, [e.playerId]: e.to }));
+        setFlight(null);
+        await sleep(300);
         return;
       case 'jump':
         await sleep(300);
@@ -140,12 +165,15 @@ export function useEventPlayer(state: GameState): Display {
         await sleep(500);
         return;
       case 'toast': {
-        const key = e.seq;
+        // A big notice card right after says the same thing, so skip the line.
+        if (queue.current[0]?.type === 'notice') return;
         const sound = toastSound(e.text);
         if (sound) sfx(sound);
-        setToasts((t) => [...t.slice(-3), { key, text: e.text, tone: e.tone }]);
-        setTimeout(() => setToasts((t) => t.filter((x) => x.key !== key)), 3200);
-        await sleep(120);
+        const who = latest.current.players.filter((p) => e.text.includes(p.name)).sort((a, b) => e.text.indexOf(a.name) - e.text.indexOf(b.name))[0];
+        setOverlay({ kind: 'line', playerId: who?.id ?? null, text: e.text, tone: e.tone });
+        await wait(1800);
+        setOverlay(null);
+        await sleep(80);
         return;
       }
       case 'say': {
@@ -203,5 +231,5 @@ export function useEventPlayer(state: GameState): Display {
     }
   }
 
-  return { pos, hopping, focus, busy, overlay, bubbles, toasts, pops, building, skip: () => skipWait.current?.() };
+  return { pos, hopping, focus, busy, overlay, bubbles, toasts, pops, building, flight, slow, skip: () => skipWait.current?.() };
 }

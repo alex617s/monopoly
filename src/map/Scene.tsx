@@ -24,6 +24,48 @@ function spot(k: number, n: number): [number, number] {
   return [(col - (inRow - 1) / 2) * 52, row * 22 - (n > 3 ? 10 : 0) + (col % 2) * 8];
 }
 
+/** A plane carrying a player from one airport to the other, along the dotted route. */
+function Flight({ flight, player }: { flight: NonNullable<Display['flight']>; player: GameState['players'][number] }) {
+  const a = ROADS[flight.from];
+  const b = ROADS[flight.to];
+  const mx = (a.x + b.x) / 2;
+  const my = Math.min(a.y, b.y) - 520;
+  const path = `path('M${a.x} ${a.y - 20} Q${mx} ${my} ${b.x} ${b.y - 20}')`;
+  return (
+    <div className="flight" style={{ offsetPath: path } as CSSProperties}>
+      <div className={`flight__craft ${b.x < a.x ? 'flight__craft--west' : ''}`}>
+        <svg viewBox="-60 -40 120 80" width="190" height="126" aria-hidden="true">
+          <path d="M-50 0 L44 -6 Q60 0 44 6 Z" fill="#fff" stroke="#1b6fc2" strokeWidth="4" />
+          <path d="M-4 -4 L-22 -36 L-8 -36 L18 -4Z M-4 4 L-22 36 L-8 36 L18 4Z M-42 -2 L-54 -18 L-44 -18 L-32 -2Z" fill="#e5383b" stroke="#fff" strokeWidth="3" />
+          <circle cx="30" cy="-1" r="4" fill="#9fd8ff" />
+        </svg>
+        <img className="flight__rider" src={art(`char-${player.character}`)} alt="" draggable={false} />
+      </div>
+    </div>
+  );
+}
+
+/** What a player rides on: the ferry, a scooter or a car. Uses the ChatGPT picture when there is one. */
+function Ride({ kind }: { kind: 'boat' | 'scooter' | 'car' }) {
+  const [failed, setFailed] = useState(false);
+  const name = kind === 'boat' ? 'prop-boat' : `vehicle-${kind}`;
+  if (!failed) return <img className={`ride ride--${kind}`} src={art(name)} alt="" draggable={false} onError={() => setFailed(true)} />;
+  if (kind === 'boat')
+    return (
+      <svg className="ride ride--boat" viewBox="-70 -40 140 70" aria-hidden="true">
+        <path d="M-60 0 h120 l-18 22 h-84z" fill="#e5383b" stroke="#fff" strokeWidth="4" />
+        <path d="M-66 26 q16 -8 32 0 q16 8 32 0 q16 -8 32 0 q16 8 32 0" stroke="#fff" strokeWidth="5" fill="none" />
+      </svg>
+    );
+  return (
+    <svg className={`ride ride--${kind}`} viewBox="-60 -40 120 70" aria-hidden="true">
+      <path d={kind === 'car' ? 'M-52 6 q0 -20 18 -22 l14 -16 h40 l16 16 q18 2 18 22 v8 h-106z' : 'M-40 8 l20 -22 h28 l10 -14 h10 l-6 20 l24 16 z'} fill={kind === 'car' ? '#3a86ff' : '#e5383b'} stroke="#fff" strokeWidth="4" strokeLinejoin="round" />
+      <circle cx="-30" cy="16" r="11" fill="#2b2d42" stroke="#fff" strokeWidth="3" />
+      <circle cx="32" cy="16" r="11" fill="#2b2d42" stroke="#fff" strokeWidth="3" />
+    </svg>
+  );
+}
+
 /** The next few spaces along one way, for showing the choice at a fork. */
 function pathAhead(to: number) {
   const out = [to];
@@ -78,7 +120,7 @@ export function Scene({ state, display, overview, forkOptions, onFork, onPlot }:
   let z: number;
   let tx: number;
   let ty: number;
-  if (overview) {
+  if (overview || display.flight) {
     z = Math.min(size.w / WORLD_W, size.h / WORLD_H) * 1.05;
     tx = (size.w - WORLD_W * z) / 2;
     ty = (size.h - WORLD_H * z) / 2;
@@ -92,6 +134,7 @@ export function Scene({ state, display, overview, forkOptions, onFork, onPlot }:
   const live = state.players.filter((p) => !p.out);
   const roadOf = (id: string) => display.pos[id] ?? state.players.find((p) => p.id === id)!.pos;
   const pieces = live
+    .filter((p) => p.id !== display.flight?.playerId)
     .map((p) => {
       const road = ROADS[roadOf(p.id)];
       const here = live.filter((o) => roadOf(o.id) === road.id);
@@ -140,13 +183,16 @@ export function Scene({ state, display, overview, forkOptions, onFork, onPlot }:
           const bubble = display.bubbles.find((b) => b.playerId === p.id);
           const pop = display.pops.filter((m) => m.playerId === p.id).slice(-1)[0];
           const active = p.id === state.players[state.current].id && !state.over;
+          const onBoat = ROADS[roadOf(p.id)].disc === 'ferry';
+          const ride = onBoat ? 'boat' : p.vehicle?.kind ?? null;
           return (
             <div
               key={p.id}
-              className={`piece ${active ? 'piece--active' : ''} ${display.hopping === p.id ? 'piece--hop' : ''}`}
+              className={`piece ${active ? 'piece--active' : ''} ${display.hopping === p.id ? 'piece--hop' : ''} ${ride ? 'piece--ride' : ''} ${display.slow === p.id ? 'piece--slow' : ''}`}
               style={{ left: x, top: y, '--c': p.color } as CSSProperties}
             >
               <div className="piece__shadow" />
+              {ride && <Ride kind={ride} />}
               <div className="piece__body">
                 <img className="piece__figure" src={art(`char-${p.character}`)} alt="" draggable={false} />
                 <div className="piece__tag">{p.name}</div>
@@ -179,6 +225,7 @@ export function Scene({ state, display, overview, forkOptions, onFork, onPlot }:
             </div>
           );
         })}
+        {display.flight && <Flight key={display.flight.key} flight={display.flight} player={state.players.find((p) => p.id === display.flight!.playerId)!} />}
         {rising && <Rising key={rising.key} plot={rising.plot} level={rising.level} />}
         {forkOptions && forkOptions.length > 0 && (
           <svg className="world__svg fork-glow" width={WORLD_W} height={WORLD_H} viewBox={`0 0 ${WORLD_W} ${WORLD_H}`} aria-hidden="true">
