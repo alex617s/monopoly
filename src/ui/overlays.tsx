@@ -135,7 +135,7 @@ export function OverlayView({ overlay, state, onSkip }: { overlay: Overlay; stat
     return (
       <div className="overlay overlay--dim" onClick={onSkip}>
         <div className="chance">
-          <div className="chance__head">? CHANCE</div>
+          <div className="chance__head">CHANCE ?</div>
           <Avatar character={p.character} size={72} ring={p.color} />
           <p>{overlay.text}</p>
         </div>

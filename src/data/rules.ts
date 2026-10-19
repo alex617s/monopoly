@@ -34,7 +34,7 @@ export const RULES = {
   godDays: 3,
   mapGodDays: 5,
 
-  vehicleDays: 10,
+  vehicleDays: 5,
   waterBalloonDays: 5,
   teamUpDays: 3,
   priceUpDays: 3,

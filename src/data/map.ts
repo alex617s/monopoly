@@ -211,6 +211,10 @@ BRANCHES.push({
 });
 
 const PLOT_OFFSET = 118;
+/** Size of a city sign on the map (drawn in sceneSvg), for keeping it clear of places. */
+export const SIGN_SCALE = 0.82;
+export const SIGN_H = 104 * SIGN_SCALE;
+export const signWidth = (text: string) => (text.length * 19 + 40) * SIGN_SCALE;
 const CENTRE = plane([134, -25]);
 const TAS_CENTRE = plane([146.6, -42.0]);
 const PER = 24;
@@ -241,23 +245,33 @@ function build() {
 
   const placePlot = (p: Pt, dir: Pt, preferLeft: boolean | null): Pt => {
     const n: Pt = [-dir[1], dir[0]];
-    const score = (c: Pt, off: number) => {
+    // Clearances are checked on screen, where a place is a wide oval with its sign or building above.
+    const roadWorld = roadPoints.map(toWorld);
+    const clear = (c: Pt, pts: Pt[], rx: number, ry: number) => {
+      const [x, y] = toWorld(c);
+      return Math.min(Infinity, ...pts.map((q) => Math.hypot((q[0] - x) / rx, (q[1] - y) / ry)));
+    };
+    const score = (c: Pt, side: number) => {
       let v = onLand(c) ? 0 : 1000;
-      const nearRoad = Math.min(...roadPoints.map((q) => Math.hypot(q[0] - c[0], q[1] - c[1])));
-      if (nearRoad < PLOT_OFFSET * 0.8) v += 500;
-      const nearPlot = Math.min(Infinity, ...planePos.map((q) => Math.hypot(q[0] - c[0], q[1] - c[1])));
-      if (nearPlot < 160) v += 700 + (160 - nearPlot);
+      const road = clear(c, roadWorld, 112, 92);
+      if (road < 1) v += 500 + (1 - road) * 500;
+      const plot = clear(c, planePos.map(toWorld), 165, 130);
+      if (plot < 1) v += 700 + (1 - plot) * 700;
+      // stay close to the space it belongs to
+      v += Math.hypot(c[0] - p[0], c[1] - p[1]) / 4;
+      if (preferLeft !== null && (side === 1) === preferLeft) v -= 0.5;
       // inland on the mainland; towards the coast on little Tasmania, where the road loops round
       const pull = inside(c, TASMANIA_PLANE) ? -Math.hypot(c[0] - TAS_CENTRE[0], c[1] - TAS_CENTRE[1]) / 200 : Math.hypot(c[0] - CENTRE[0], c[1] - CENTRE[1]) / 1000;
-      return v + (off - PLOT_OFFSET) / 4 + pull;
+      return v + pull;
     };
     let best: { c: Pt; v: number } | null = null;
-    for (const off of [PLOT_OFFSET, PLOT_OFFSET * 1.35, PLOT_OFFSET * 1.7]) {
-      for (const side of [1, -1]) {
-        const c: Pt = [p[0] + n[0] * off * side, p[1] + n[1] * off * side];
-        let v = score(c, off);
-        if (preferLeft !== null && (side === 1) === preferLeft) v -= 0.5;
-        if (!best || v < best.v) best = { c, v };
+    for (const off of [1, 1.25, 1.5, 1.8, 2.2, 2.6].map((f) => f * PLOT_OFFSET)) {
+      for (const along of [0, 50, -50, 100, -100, 150, -150]) {
+        for (const side of [1, -1]) {
+          const c: Pt = [p[0] + n[0] * off * side + dir[0] * along, p[1] + n[1] * off * side + dir[1] * along];
+          const v = score(c, side);
+          if (!best || v < best.v) best = { c, v };
+        }
       }
     }
     planePos.push(best!.c);
@@ -313,22 +327,33 @@ function build() {
   });
 
 
-  // Each region's sign stands at its real city, or as near to it as there is room.
+  // Each region's sign stands at its real city, or as near to it as there is room,
+  // clear of the road and of every place with its price sign or building.
+  const signs: { x: number; y: number; half: number }[] = [];
   const regions: Region[] = REGION_DEFS.map(({ city, ...r }) => {
     const [cx, cy] = toWorld(plane(city));
-    // signs are drawn above the places, so they only keep clear of the road
-    const free = (x: number, y: number) =>
-      onLand(fromWorld([x, y])) &&
-      roads.every((q) => Math.hypot(q.x - x, q.y - y) > 90) &&
-      curves.every((c) => c.pts.every((q, i) => i % 3 !== 0 || Math.hypot(q[0] - x, q[1] - y) > 60));
-    for (let dist = 0; dist <= 200; dist += 25) {
-      for (let a = 0; a < (dist ? 24 : 1); a++) {
-        const x = cx + Math.cos((a * Math.PI) / 12) * dist;
-        const y = cy + Math.sin((a * Math.PI) / 12) * dist * 0.7;
-        if (free(x, y)) return { ...r, label: { x, y } };
+    const half = signWidth(r.capital ? `★ ${r.name}` : r.name) / 2 + 12;
+    const free = (x: number, y: number, seaOk: boolean) =>
+      (seaOk || onLand(fromWorld([x, y]))) &&
+      // the whole board, not just the post, keeps off the road (roads are 66 wide)
+      curves.every((c) => c.pts.every(([qx, qy]) => Math.abs(qx - x) > half + 40 || qy < y - SIGN_H - 45 || qy > y + 45)) &&
+      plots.every((pl) => x + half < pl.x - 80 || x - half > pl.x + 80 || y + 10 < pl.y - 130 || y - SIGN_H - 10 > pl.y + 46) &&
+      signs.every((o) => Math.abs(o.x - x) > o.half + half || Math.abs(o.y - y) > SIGN_H + 30);
+    const find = (seaOk: boolean, reach: number) => {
+      for (let dist = 0; dist <= reach; dist += 20) {
+        for (let a = 0; a < (dist ? 36 : 1); a++) {
+          const x = cx + Math.cos((a * Math.PI) / 18) * dist;
+          const y = cy + Math.sin((a * Math.PI) / 18) * dist * 0.7;
+          if (free(x, y, seaOk)) return { x, y };
+        }
       }
-    }
-    return { ...r, label: { x: cx, y: cy } };
+      return null;
+    };
+    // a coastal city may have its sign just offshore when the land is full
+    const inland = ['canberra', 'uluru', 'outback'].includes(r.id);
+    const label = (inland ? find(false, 520) : find(false, 220) ?? find(true, 420)) ?? { x: cx, y: cy };
+    signs.push({ ...label, half });
+    return { ...r, label };
   });
   const flights = [[named['sydney-air'], named['perth-air']]] as [number, number][];
   return { roads, plots, regions, curves, flights };

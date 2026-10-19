@@ -52,7 +52,8 @@ function toastSound(text: string): Sfx | null {
   if (/goes to Hospital/.test(text)) return 'hospital';
   if (/banana|SPLASH/i.test(text)) return 'banana';
   if (/firework|BOOM/i.test(text)) return 'rocket';
-  if (/ built |Angel built| turned /.test(text)) return 'build';
+  // building already chimes on its own build event
+  if (/ turned /.test(text)) return 'build';
   if (/ card/.test(text)) return 'card';
   if (/ bought .+ for \$/.test(text)) return 'buy';
   if (/the bank\.$/.test(text)) return 'bank';
@@ -153,7 +154,8 @@ export function useEventPlayer(state: GameState): Display {
         setFocus(e.playerId);
         sfx('start');
         setFlight({ playerId: e.playerId, from: e.from, to: e.to, key: e.seq });
-        await sleep(3200);
+        // the camera pulls back first (0.7s), then the plane flies (3s)
+        await sleep(3800);
         setPos((p) => ({ ...p, [e.playerId]: e.to }));
         setFlight(null);
         await sleep(300);
@@ -184,7 +186,8 @@ export function useEventPlayer(state: GameState): Display {
       }
       case 'money': {
         const key = e.seq;
-        sfx(e.amount > 0 ? 'coin' : 'pay');
+        // paying for a building: the build chime is enough
+        if (queue.current[0]?.type !== 'build') sfx(e.amount > 0 ? 'coin' : 'pay');
         setPops((p) => [...p, { key, playerId: e.playerId, amount: e.amount }]);
         setTimeout(() => setPops((p) => p.filter((x) => x.key !== key)), 1800);
         return;

@@ -4,7 +4,7 @@
 
 import { GODS } from '../data/content';
 import { LonLat, MAINLAND_PLANE, Pt, TASMANIA_PLANE, WORLD_H, WORLD_W, fromWorld, inside, lonLatToWorld, plane, smoothPath, toWorld } from '../data/geo';
-import { DISC_INFO, FLIGHTS, PLOTS, REGIONS, ROADS, ROAD_CURVES, regionById } from '../data/map';
+import { DISC_INFO, FLIGHTS, PLOTS, REGIONS, ROADS, ROAD_CURVES, SIGN_SCALE, regionById } from '../data/map';
 import type { SpecialId } from '../data/rules';
 import type { GameState } from '../game/types';
 import { art } from '../ui/common';
@@ -150,7 +150,7 @@ function flightPath(a: { x: number; y: number }, b: { x: number; y: number }) {
 
 function regionSign(x: number, y: number, text: string, color: string) {
   const w = text.length * 19 + 40;
-  return `<g transform="translate(${r1(x)},${r1(y)})"><ellipse cx="4" cy="2" rx="${w / 2.6}" ry="10" fill="#000" opacity=".18"/><rect x="-12" y="-46" width="8" height="48" rx="3" fill="#8a5a33"/><rect x="4" y="-46" width="8" height="48" rx="3" fill="#7a4b25"/>
+  return `<g transform="translate(${r1(x)},${r1(y)}) scale(${SIGN_SCALE})"><ellipse cx="4" cy="2" rx="${w / 2.6}" ry="10" fill="#000" opacity=".18"/><rect x="-12" y="-46" width="8" height="48" rx="3" fill="#8a5a33"/><rect x="4" y="-46" width="8" height="48" rx="3" fill="#7a4b25"/>
 <rect x="${-w / 2}" y="-98" width="${w}" height="56" rx="16" fill="${shade(color, -0.3)}"/><rect x="${-w / 2}" y="-104" width="${w}" height="56" rx="16" fill="${color}" stroke="#fff" stroke-width="4"/>
 <text x="0" y="-66" text-anchor="middle" class="sign-name">${text}</text></g>`;
 }

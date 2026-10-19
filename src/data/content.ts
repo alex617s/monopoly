@@ -64,8 +64,8 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   robot: { name: 'Robot Helper', desc: 'Clears roadblocks and bananas 10 spaces ahead.', price: 15, mean: false, target: 'none', color: '#566079' },
   monsterTruck: { name: 'Monster Truck', desc: 'Drives 10 spaces ahead: clears every trap and knocks 1 level off other players’ buildings by the road.', price: 60, mean: true, target: 'none', color: '#7a4b25' },
   rocket: { name: 'Firework Rocket', desc: 'Knocks 1 level off any building. Anyone standing there goes to Hospital for 1 turn.', price: 100, mean: true, target: 'anyPlot', color: '#d6342c' },
-  scooter: { name: 'Scooter', desc: 'Spin 2 wheels for 10 days.', price: 80, mean: false, target: 'none', color: '#1b9aaa' },
-  car: { name: 'Car', desc: 'Spin 3 wheels for 10 days.', price: 150, mean: false, target: 'none', color: '#d6342c' },
+  scooter: { name: 'Scooter', desc: 'Spin 2 wheels for 5 days.', price: 80, mean: false, target: 'none', color: '#1b9aaa' },
+  car: { name: 'Car', desc: 'Spin 3 wheels for 5 days.', price: 150, mean: false, target: 'none', color: '#d6342c' },
 };
 export const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
 
